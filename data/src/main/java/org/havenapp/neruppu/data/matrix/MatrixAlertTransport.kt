@@ -25,6 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.havenapp.neruppu.domain.model.AlertPayload
 import org.havenapp.neruppu.domain.transport.AlertTransport
+import org.havenapp.neruppu.domain.util.AlertMessageFormatter
 import java.io.ByteArrayOutputStream
 import java.io.File
 import javax.inject.Inject
@@ -50,8 +51,8 @@ class MatrixAlertTransport @Inject constructor(
                 Log.d("MatrixAlertTransport", "Sending alert payload type: ${payload::class.simpleName}")
             }
             when (payload) {
-                is AlertPayload.TextAlert -> {
-                    val msg = "[🔥 Neruppu] ${payload.sensorType.name}: ${payload.message}"
+                 is AlertPayload.TextAlert -> {
+                     val msg = AlertMessageFormatter.format(payload)
                     if (BuildConfig.DEBUG) {
                         Log.d("MatrixAlertTransport", "Sending text event...")
                     }
@@ -61,8 +62,8 @@ class MatrixAlertTransport @Inject constructor(
                     }
                 }
 
-                is AlertPayload.MediaAlert -> {
-                    val textMsg = "[🔥 Neruppu] ${payload.sensorType.name}: ${payload.message}"
+                 is AlertPayload.MediaAlert -> {
+                     val textMsg = AlertMessageFormatter.format(payload)
                     if (BuildConfig.DEBUG) {
                         Log.d("MatrixAlertTransport", "Sending initial text alert...")
                     }

@@ -1,10 +1,7 @@
 
 
 Role: Android kotlin developer
-Context: 
-1. Analyse uncomitted changes.
-2. If it does not follow best practise, improve them.
-3. If everything is fine, i'll push it to github myself.
+Context: UI in log tab to show whether media is uploaded are not has weird alignment.
 
 
 
