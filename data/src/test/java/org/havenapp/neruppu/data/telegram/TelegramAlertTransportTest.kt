@@ -57,7 +57,7 @@ class TelegramAlertTransportTest {
 
         transport.send(payload)
 
-        coVerify { apiClient.sendMessage(match { it.contains("CAMERA_MOTION") && it.contains("Motion detected") }) }
+        coVerify { apiClient.sendMessage(match { it.contains("Security Alert") && it.contains("Motion detected") }) }
     }
 
     @Test

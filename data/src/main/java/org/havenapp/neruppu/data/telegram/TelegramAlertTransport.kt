@@ -25,6 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.havenapp.neruppu.domain.model.AlertPayload
 import org.havenapp.neruppu.domain.transport.AlertTransport
+import org.havenapp.neruppu.domain.util.AlertMessageFormatter
 import java.io.ByteArrayOutputStream
 import java.io.File
 import javax.inject.Inject
@@ -49,7 +50,7 @@ class TelegramAlertTransport @Inject constructor(
             if (BuildConfig.DEBUG) {
                 Log.d("TelegramAlertTransport", "Sending alert: $payload")
             }
-            val textMsg = "<b>[🔥 Neruppu]</b> ${payload.sensorType.name}: ${payload.message}"
+            val textMsg = AlertMessageFormatter.format(payload)
 
             when (payload) {
                 is AlertPayload.TextAlert -> {

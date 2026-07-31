@@ -36,8 +36,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgeDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -65,6 +63,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -323,32 +322,15 @@ fun EventItem(event: Event) {
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     if (event.mediaUri != null) {
-                        Badge("📷 Photo", NeruppuOrangeSoft, NeruppuOrange)
+                        IconIndicator(Icons.Default.Image, NeruppuOrange)
                     } else if (event.audioUri != null) {
-                        Badge("🎙 Audio", NeruppuBlueSoft, NeruppuBlue)
+                        IconIndicator(Icons.Default.AudioFile, NeruppuBlue)
                     }
                     Spacer(modifier = Modifier.width(4.dp))
                     when (event.uploadStatus) {
-                        UploadStatus.PENDING -> Badge("⏳ Pending upload", NeruppuAmberSoft, NeruppuAmber)
-                        UploadStatus.UPLOADED -> {
-                            val targetName = when (event.uploadTarget) {
-                                "TELEGRAM" -> "📤 Uploaded to Telegram"
-                                "MATRIX" -> "📤 Uploaded to Matrix"
-                                else -> "📤 Uploaded"
-                            }
-                            val targetBg = when (event.uploadTarget) {
-                                "TELEGRAM" -> NeruppuGreenSoft
-                                "MATRIX" -> NeruppuBlueSoft
-                                else -> NeruppuGreenSoft
-                            }
-                            val targetColor = when (event.uploadTarget) {
-                                "TELEGRAM" -> NeruppuGreen
-                                "MATRIX" -> NeruppuBlue
-                                else -> NeruppuGreen
-                            }
-                            Badge(targetName, targetBg, targetColor)
-                        }
-                        UploadStatus.FAILED -> Badge("⚠ Upload failed", NeruppuRedSoft, NeruppuRed)
+                        UploadStatus.PENDING -> IconIndicator(Icons.Default.Schedule, NeruppuAmber)
+                        UploadStatus.UPLOADED -> IconIndicator(Icons.Default.CheckCircle, NeruppuGreen)
+                        UploadStatus.FAILED -> IconIndicator(Icons.Default.Error, NeruppuRed)
                     }
                 }
             }
@@ -404,6 +386,51 @@ fun EventItem(event: Event) {
                 else -> "Sensor trigger event."
             }
             Text(detailMeta, color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+
+            Column(modifier = Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (event.mediaUri != null || event.audioUri != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (event.mediaUri != null) {
+                            Icon(Icons.Default.Image, null, modifier = Modifier.size(14.dp), tint = NeruppuOrange)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Photo", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (event.audioUri != null) {
+                            Icon(Icons.Default.AudioFile, null, modifier = Modifier.size(14.dp), tint = NeruppuBlue)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Audio", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+                when (event.uploadStatus) {
+                    UploadStatus.PENDING -> {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Schedule, null, modifier = Modifier.size(14.dp), tint = NeruppuAmber)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Pending upload", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    UploadStatus.UPLOADED -> {
+                        val targetText = when (event.uploadTarget) {
+                            "TELEGRAM" -> "Uploaded to Telegram"
+                            "MATRIX" -> "Uploaded to Matrix"
+                            else -> "Uploaded"
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CloudDone, null, modifier = Modifier.size(14.dp), tint = NeruppuGreen)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(targetText, color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    UploadStatus.FAILED -> {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Error, null, modifier = Modifier.size(14.dp), tint = NeruppuRed)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Upload failed", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -722,13 +749,19 @@ fun DeletedMediaPlaceholder(text: String) {
 }
 
 @Composable
-fun Badge(text: String, bgColor: Color, textColor: Color) {
+fun IconIndicator(icon: ImageVector, tint: Color) {
     Box(
         modifier = Modifier
-            .background(bgColor, RoundedCornerShape(10.dp))
-            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .size(24.dp)
+            .background(tint.copy(alpha = 0.12f), CircleShape),
+        contentAlignment = Alignment.Center
     ) {
-        Text(text, color = textColor, style = MaterialTheme.typography.labelSmall)
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(14.dp)
+        )
     }
 }
 
