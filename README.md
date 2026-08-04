@@ -1,120 +1,26 @@
-# Neruppu (Physical Security & Monitoring)
+Security shouldn't require an installer, a subscription, and a stranger's server. It should just be your phone, watching.
 
-Neruppu (Tamil for *Fire*) is a modern, high-security Android application that turns your device into a sophisticated physical monitoring system. Built on the legacy of "Haven," Neruppu is redesigned from scratch using the latest Android technologies to provide an air-gapped, privacy-first security solution.
+[![Build Status](https://github.com/thamizh-root/neruppu/actions/workflows/release.yml/badge.svg?event=push)](https://github.com/thamizh-root/neruppu/actions/workflows/release.yml?query=event%3Apush)
+[![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
-<div align="center">
-  <img src="assets/neruppu_social_preview.png" alt="Neruppu" />
-</div> 
+<img alt="Fresco Logo" align="right" src="/junkyard/dev.assets/final-neruppu-logo-svgviewer-output.svg" width="25%" />
 
-[![Android API](https://img.shields.io/badge/API-26%2B-brightgreen.svg)](https://android-arsenal.com/api?level=26)
-[![Kotlin](https://img.shields.io/badge/Kotlin-1.9-blue.svg)](https://kotlinlang.org)
-[![Compose](https://img.shields.io/badge/Jetpack%20Compose-1.5-orange.svg)](https://developer.android.com/jetpack/compose)
+You travel. You check into a hotel. You leave your room for six hours. When you get back, you have exactly one question: **Did anyone come in while I was gone?** Not "here's 6 hours of raw footage, go find it yourself." Just: yes, or no — and if yes, here's the proof. 
 
-## Key Features
+You can't bolt a CCTV camera to a hotel wall. You shouldn't have to. Your phone already has a camera, a microphone, and a brain. Neruppu just points them at the problem. It turns an old Android phone into something smarter than a camera. It *pays attention*.
 
-*   **Intelligent Guarding**: Monitor your environment using the camera, microphone, and motion sensors simultaneously.
-*   **Visual Evidence**: High-speed motion analysis using CameraX captures photos when movement is detected.
-*   **Acoustic Bursts**: Real-time microphone tracking automatically records audio clips when sudden noise occurs.
-*   **Matrix Alerts**: Receive real-time alerts on any device using the Matrix protocol (configurable in settings).
-*   **Privacy First**: Strictly offline-first architecture with encrypted configuration storage.
-*   **Smart Storage Management**: Clear your security logs and physically wipe associated media files from storage with a single confirmation.
-*   **Unified UI/UX**: A modern, Jetpack Compose interface with a consistent design language across all screens.
-*   **Persistent Monitoring**: Robust Foreground Service ensures continuous protection even when the app is in the background.
+- **Sees.** A motion sensor triggers the camera the instant something moves.
+- **Hears.** Real-time microphone tracking catches sudden noise and records it.
+- **Tells you. Now.** Alerts land on your other devices instantly, over Telegram or Matrix — your choice, no middleman required.
+- **And more.** This is a starting point, not a finish line.
 
-## Project Structure
-
-The project follows a modular Clean Architecture pattern:
-- `:app` - Entry point, Foreground Service, and Hilt DI setup.
-- `:domain` - Core business logic, models, and repository interfaces (Pure Kotlin).
-- `:data` - Repository implementations, Room database, and hardware drivers (Camera, Sensors).
-- `:ui` - Common UI components and feature-specific Jetpack Compose screens.
-- `:core` - Shared utilities, theme definitions, and base classes.
-
-## Screen-by-Screen Breakdown
-
-### 1. Home - The Dashboard
-The command center. Toggle monitoring with the "Start Guarding" button. View real-time sensor levels (Luminosity, Sound dB, Motion) and a live activity preview.
-
-### 2. Events - The Evidence Log
-Review all security triggers in a unified, modern list.
-*   **Filter**: Quickly filter between Motion, Sound, or Light events.
-*   **Review**: Expand items to view high-quality photos or listen to captured audio.
-*   **Safe Clear**: Delete logs with an optional toggle to physically wipe the media files from your device.
-
-### 3. Settings - Calibration & Matrix
-Fine-tune your security environment.
-*   **Sensor Toggles**: Enable/Disable specific sensors.
-*   **Sensitivity Sliders**: Adjust motion and sound thresholds to minimize false positives.
-*   **Matrix Configuration**: Detailed setup for receiving remote notifications.
-
-##  Matrix Configuration Guide
-
-To receive alerts on your primary phone or computer:
-
-1.  **Create a Room**: On your Matrix client (e.g., Element), create a new private room.
-2.  **Get Credentials**:
-    *   **Homeserver URL**: e.g., `https://matrix.org`.
-    *   **Room ID**: Found in Room Settings -> Advanced (looks like `!abc123:matrix.org`).
-    *   **Access Token**: Found in your User Settings -> Help & About (Advanced).
-3.  **Configure**: Enter details in Neruppu Settings and tap **Save Config**.
-4.  **Verify**: Use the **Test Connection** button to confirm setup.
-
-| Home Dashboard | Evidence Log | Settings & Matrix |
-| :---: | :---: | :---: |
-| <img src="assets/home.jpg" style="width:300px;" /> | <img src="assets/events.jpg" style="width:300px;" /> | <img src="assets/settings.jpg" style="width:300px;" /> |
-
-## How to Try Neruppu
-You can try Neruppu immediately by downloading the latest `.apk` from the **Releases** tab.
-
-Simply install the app on your Android device and start guarding your environment. We highly value your feedback—whether it's constructive criticism or appreciation, your input is vital to making Neruppu a better tool for everyone.
-
-### Command Line Shortcuts
-
-Run these commands from the project root directory using your command prompt (cmd):
-
-```bash
-# 1. Clean and Build the project (Downloads dependencies & compiles)
-./gradlew clean build
-
-# 2. Build the Debug APK quickly (Skips checks and tests)
-./gradlew assembleDebug
-
-# 3. Install and run the app on a connected device/emulator
-./gradlew installDebug
-
-# 4. Run all Local Unit Tests (JVM)
-./gradlew test
-
-# 5. Run all Instrumented UI Tests (Requires connected device/emulator)
-./gradlew connectedAndroidTest
-```
-
-*Note for Windows users: If `./gradlew` does not work, use `gradlew` or `.\gradlew.bat` instead.*
-
-## 💖 Sponsor / Support Development
-
-If Neruppu has been useful to you and you'd like to support its continued development, consider donating:
-
-- **Matrix Contact:** @thamizh-root:matrix.org
-
-Your support helps cover server costs, development time, and ensures Neruppu remains open-source and free for everyone.
-
----
+You can try Neruppu immediately by downloading the latest `.apk` from the [Releases](../../releases) tab. Simply install the app on your Android device and start guarding your environment.
 
 ## License
 
-[![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-
 Neruppu is licensed under the **GNU General Public License v3.0 or later (GPL-3.0-or-later)**.
 
-This license grants you the freedom to use, modify, and distribute the software — including for commercial purposes — as long as you keep any derivative works open-source under the same license. In short:
-
-- ✅ Use and modify freely
-- ✅ Distribute copies
-- ❌ Distribute closed-source variants
-- ❌ Use the Neruppu trademark without permission
-
-See [LICENSE](LICENSE) for the full legal text.
+This license grants you the freedom to use, modify, and distribute the software — including for commercial purposes — as long as you keep any derivative works open-source under the same license.
 
 ```text
 Copyright (C) 2026 thamizh-root
@@ -132,3 +38,4 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ```
+See [LICENSE](LICENSE) for the full legal text.
