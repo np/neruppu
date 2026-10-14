@@ -21,6 +21,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.FilterChip
+import org.havenapp.neruppu.domain.util.HttpsBodyEncoding
+import org.havenapp.neruppu.domain.util.HttpsPreset
+import org.havenapp.neruppu.domain.util.HttpsRequestTemplate
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -198,11 +205,28 @@ fun SettingsScreen(
             onValueChange = httpsViewModel::onEndpointUrlChange
         ),
         IntegrationField(
-            label = "Bearer token (optional)",
-            placeholder = "sent as Authorization: Bearer …",
-            value = httpsUiState.authToken,
-            onValueChange = httpsViewModel::onAuthTokenChange,
-            isPassword = true
+            label = "Headers",
+            placeholder = "Authorization: Bearer …",
+            value = httpsUiState.headers,
+            onValueChange = httpsViewModel::onHeadersChange,
+            singleLine = false,
+            supportingText = "One \"Name: value\" per line"
+        ),
+        IntegrationField(
+            label = "Fields",
+            placeholder = "message={message}",
+            value = httpsUiState.fields,
+            onValueChange = httpsViewModel::onFieldsChange,
+            singleLine = false,
+            supportingText = "One \"name=value\" per line. Placeholders: " +
+                HttpsRequestTemplate.PLACEHOLDERS.keys.joinToString(" ") { "{$it}" }
+        ),
+        IntegrationField(
+            label = "Capture field (multipart only)",
+            placeholder = "file",
+            value = httpsUiState.fileField,
+            onValueChange = httpsViewModel::onFileFieldChange,
+            supportingText = "Empty: captures stay on the device, only the notification is sent"
         )
     )
 
@@ -476,8 +500,50 @@ fun SettingsScreen(
         uiState = httpsUiState,
         actions = httpsViewModel,
         fields = httpsFields,
-        descriptionText = "Each alert is POSTed as multipart/form-data to your own HTTPS endpoint. Captures are sent as the encrypted .age file."
+        descriptionText = "Each alert is POSTed to your HTTPS endpoint as you define it here. Captures are attached as the encrypted .age file.",
+        extraContent = {
+            HttpsRequestChoices(
+                encoding = httpsUiState.encoding,
+                onEncodingChange = httpsViewModel::onEncodingChange,
+                onPreset = httpsViewModel::applyPreset
+            )
+        }
     )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun HttpsRequestChoices(
+    encoding: HttpsBodyEncoding,
+    onEncodingChange: (HttpsBodyEncoding) -> Unit,
+    onPreset: (HttpsPreset) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("Start from", color = TextSecondary, style = MaterialTheme.typography.labelMedium)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            HttpsPreset.entries.forEach { preset ->
+                AssistChip(onClick = { onPreset(preset) }, label = { Text(preset.label) })
+            }
+        }
+        Text("Body encoding", color = TextSecondary, style = MaterialTheme.typography.labelMedium)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            HttpsBodyEncoding.entries.forEach { option ->
+                FilterChip(
+                    selected = option == encoding,
+                    onClick = { onEncodingChange(option) },
+                    label = {
+                        Text(
+                            when (option) {
+                                HttpsBodyEncoding.MULTIPART -> "multipart"
+                                HttpsBodyEncoding.FORM -> "form"
+                                HttpsBodyEncoding.JSON -> "JSON"
+                            }
+                        )
+                    }
+                )
+            }
+        }
+    }
 }
 
 @Composable

@@ -123,7 +123,7 @@ class MediaUploadRepositoryImpl @Inject constructor(
                             uploadedAt = null,
                             failureReason = "Image upload failed: $error"
                         )
-                    } else {
+                    } else if (transport.deliversMedia) {
                         deleteMediaFile(mediaUri)
                     }
                 }
@@ -168,7 +168,7 @@ class MediaUploadRepositoryImpl @Inject constructor(
                             uploadedAt = null,
                             failureReason = "Audio upload failed: $error"
                         )
-                    } else {
+                    } else if (transport.deliversMedia) {
                         deleteMediaFile(audioUri)
                     }
                 }

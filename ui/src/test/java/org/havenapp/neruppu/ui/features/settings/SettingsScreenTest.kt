@@ -33,6 +33,7 @@ import org.havenapp.neruppu.domain.repository.HttpsConfigRepository
 import org.havenapp.neruppu.domain.repository.MatrixConfigRepository
 import org.havenapp.neruppu.domain.repository.TelegramConfigRepository
 import org.havenapp.neruppu.domain.transport.AlertTransport
+import org.havenapp.neruppu.domain.util.HttpsBodyEncoding
 import org.junit.Rule
 import org.junit.Test
 
@@ -150,7 +151,10 @@ class SettingsScreenTest {
 
 private class FakeHttpsConfigRepository : HttpsConfigRepository {
     override var endpointUrl: String = ""
-    override var authToken: String = ""
+    override var bodyEncoding: HttpsBodyEncoding = HttpsBodyEncoding.MULTIPART
+    override var headers: String = ""
+    override var fields: String = ""
+    override var fileField: String = ""
     override val isComplete: Boolean = false
     override fun clear() {}
 }

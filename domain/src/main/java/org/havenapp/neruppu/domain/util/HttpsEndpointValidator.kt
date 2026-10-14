@@ -22,8 +22,8 @@ import java.net.URI
 object HttpsEndpointValidator {
     /**
      * Accepts absolute https:// URLs with a host and no user-info.
-     * Plain http is refused: the request carries the bearer token and,
-     * for text alerts, readable event descriptions.
+     * Plain http is refused: requests carry credentials (headers or fields)
+     * and, for text alerts, readable event descriptions.
      */
     fun isValid(url: String): Boolean {
         val uri = runCatching { URI(url.trim()) }.getOrNull() ?: return false

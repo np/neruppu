@@ -17,14 +17,21 @@
 
 package org.havenapp.neruppu.domain.repository
 
+import org.havenapp.neruppu.domain.util.HttpsBodyEncoding
+
 /**
- * Generic HTTPS endpoint receiving alerts as multipart/form-data POSTs.
- * Wire format: docs/https-transport.md.
+ * User-defined HTTPS request, sent once per alert. Headers and fields are
+ * templates (one "Name: value" / "name=value" per line) rendered by
+ * [org.havenapp.neruppu.domain.util.HttpsRequestTemplate].
+ * Wire format and placeholders: docs/https-transport.md.
  */
 interface HttpsConfigRepository {
     var endpointUrl: String
-    /** Optional; sent as "Authorization: Bearer <token>" when not blank. */
-    var authToken: String
+    var bodyEncoding: HttpsBodyEncoding
+    var headers: String
+    var fields: String
+    /** Multipart field carrying the capture; blank = captures are not sent. */
+    var fileField: String
     val isComplete: Boolean
     fun clear()
 }

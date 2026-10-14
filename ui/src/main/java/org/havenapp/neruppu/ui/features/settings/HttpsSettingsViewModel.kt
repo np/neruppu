@@ -34,12 +34,17 @@ import org.havenapp.neruppu.domain.repository.HttpsConfigRepository
 import org.havenapp.neruppu.domain.repository.MatrixConfigRepository
 import org.havenapp.neruppu.domain.repository.TelegramConfigRepository
 import org.havenapp.neruppu.domain.transport.AlertTransport
-import org.havenapp.neruppu.domain.util.HttpsEndpointValidator
+import org.havenapp.neruppu.domain.util.HttpsBodyEncoding
+import org.havenapp.neruppu.domain.util.HttpsPreset
+import org.havenapp.neruppu.domain.util.HttpsRequestTemplate
 import javax.inject.Inject
 
 data class HttpsUiState(
     val endpointUrl: String = "",
-    val authToken: String = "",
+    val encoding: HttpsBodyEncoding = HttpsBodyEncoding.MULTIPART,
+    val headers: String = "",
+    val fields: String = "",
+    val fileField: String = "",
     override val isSaved: Boolean = false,
     override val isLoading: Boolean = false,
     override val testStatus: TestStatus? = null
@@ -55,35 +60,48 @@ class HttpsSettingsViewModel @Inject constructor(
 ) : ViewModel(), IntegrationConfigActions {
 
     private val _uiState = MutableStateFlow(
-        HttpsUiState(
-            endpointUrl = configRepository.endpointUrl,
-            authToken = configRepository.authToken,
-            isSaved = configRepository.isComplete
-        )
+        if (configRepository.endpointUrl.isBlank()) {
+            HttpsPreset.NERUPPU_RECEIVER.toState()
+        } else {
+            HttpsUiState(
+                endpointUrl = configRepository.endpointUrl,
+                encoding = configRepository.bodyEncoding,
+                headers = configRepository.headers,
+                fields = configRepository.fields,
+                fileField = configRepository.fileField,
+                isSaved = configRepository.isComplete
+            )
+        }
     )
     val uiState: StateFlow<HttpsUiState> = _uiState.asStateFlow()
 
-    fun onEndpointUrlChange(value: String) {
-        _uiState.update { it.copy(endpointUrl = value) }
-    }
+    fun onEndpointUrlChange(value: String) = _uiState.update { it.copy(endpointUrl = value) }
+    fun onEncodingChange(value: HttpsBodyEncoding) = _uiState.update { it.copy(encoding = value) }
+    fun onHeadersChange(value: String) = _uiState.update { it.copy(headers = value) }
+    fun onFieldsChange(value: String) = _uiState.update { it.copy(fields = value) }
+    fun onFileFieldChange(value: String) = _uiState.update { it.copy(fileField = value) }
 
-    fun onAuthTokenChange(value: String) {
-        _uiState.update { it.copy(authToken = value) }
+    /** Fills the form only; nothing is stored until Save. */
+    fun applyPreset(preset: HttpsPreset) {
+        _uiState.update { preset.toState().copy(isSaved = it.isSaved) }
     }
 
     override fun saveConfig() {
-        val url = _uiState.value.endpointUrl.trim()
-        if (!HttpsEndpointValidator.isValid(url)) {
+        val state = _uiState.value
+        val parsed = HttpsRequestTemplate.parse(
+            state.endpointUrl, state.encoding, state.headers, state.fields, state.fileField
+        )
+        if (parsed.isFailure) {
             _uiState.update {
-                it.copy(
-                    isSaved = false,
-                    testStatus = TestStatus(success = false, error = "URL must start with https://")
-                )
+                it.copy(testStatus = TestStatus(success = false, error = parsed.exceptionOrNull()?.message))
             }
             return
         }
-        configRepository.endpointUrl = url
-        configRepository.authToken = _uiState.value.authToken
+        configRepository.endpointUrl = state.endpointUrl
+        configRepository.bodyEncoding = state.encoding
+        configRepository.headers = state.headers
+        configRepository.fields = state.fields
+        configRepository.fileField = state.fileField
         _uiState.update { it.copy(isSaved = configRepository.isComplete, testStatus = null) }
         if (configRepository.isComplete) {
             telegramConfigRepository.clear()
@@ -129,3 +147,11 @@ class HttpsSettingsViewModel @Inject constructor(
         }
     }
 }
+
+private fun HttpsPreset.toState() = HttpsUiState(
+    endpointUrl = url,
+    encoding = encoding,
+    headers = headers,
+    fields = fields,
+    fileField = fileField
+)

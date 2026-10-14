@@ -21,6 +21,14 @@ import org.havenapp.neruppu.domain.model.AlertPayload
 
 interface AlertTransport {
     val isConfigured: Boolean
+
+    /**
+     * False when a successful send() does not carry the media file itself
+     * (e.g. a notification-only HTTPS template): the local capture must then
+     * be kept, since it is the only copy.
+     */
+    val deliversMedia: Boolean get() = true
+
     suspend fun send(payload: AlertPayload): Result<Unit>
     suspend fun testConnection(): Result<Unit>
 }

@@ -24,7 +24,8 @@ import androidx.security.crypto.MasterKey
 import dagger.hilt.android.qualifiers.ApplicationContext
 import org.havenapp.neruppu.domain.repository.AlertTargetRepository
 import org.havenapp.neruppu.domain.repository.HttpsConfigRepository
-import org.havenapp.neruppu.domain.util.HttpsEndpointValidator
+import org.havenapp.neruppu.domain.util.HttpsBodyEncoding
+import org.havenapp.neruppu.domain.util.HttpsRequestTemplate
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -50,12 +51,30 @@ class HttpsConfigStore @Inject constructor(
         get() = prefs.getString(KEY_ENDPOINT_URL, "") ?: ""
         set(value) = prefs.edit().putString(KEY_ENDPOINT_URL, value.trim()).apply()
 
-    override var authToken: String
-        get() = prefs.getString(KEY_AUTH_TOKEN, "") ?: ""
-        set(value) = prefs.edit().putString(KEY_AUTH_TOKEN, value.trim()).apply()
+    override var bodyEncoding: HttpsBodyEncoding
+        get() = prefs.getString(KEY_ENCODING, null)
+            ?.let { name -> HttpsBodyEncoding.entries.firstOrNull { it.name == name } }
+            ?: HttpsBodyEncoding.MULTIPART
+        set(value) = prefs.edit().putString(KEY_ENCODING, value.name).apply()
+
+    override var headers: String
+        get() = prefs.getString(KEY_HEADERS, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_HEADERS, value).apply()
+
+    override var fields: String
+        get() = prefs.getString(KEY_FIELDS, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_FIELDS, value).apply()
+
+    override var fileField: String
+        get() = prefs.getString(KEY_FILE_FIELD, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_FILE_FIELD, value.trim()).apply()
 
     override val isComplete: Boolean
-        get() = HttpsEndpointValidator.isValid(endpointUrl)
+        get() = template().isSuccess
+
+    /** Parsed, validated request template; failure lists what is wrong. */
+    fun template(): Result<HttpsRequestTemplate> =
+        HttpsRequestTemplate.parse(endpointUrl, bodyEncoding, headers, fields, fileField)
 
     override fun clear() {
         prefs.edit().clear().apply()
@@ -65,6 +84,9 @@ class HttpsConfigStore @Inject constructor(
 
     companion object {
         private const val KEY_ENDPOINT_URL = "endpoint_url"
-        private const val KEY_AUTH_TOKEN = "auth_token"
+        private const val KEY_ENCODING = "body_encoding"
+        private const val KEY_HEADERS = "headers"
+        private const val KEY_FIELDS = "fields"
+        private const val KEY_FILE_FIELD = "file_field"
     }
 }

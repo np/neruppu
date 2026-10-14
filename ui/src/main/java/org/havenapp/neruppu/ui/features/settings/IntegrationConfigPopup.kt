@@ -21,6 +21,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -51,7 +53,9 @@ data class IntegrationField(
     val placeholder: String,
     val value: String,
     val onValueChange: (String) -> Unit,
-    val isPassword: Boolean = false
+    val isPassword: Boolean = false,
+    val singleLine: Boolean = true,
+    val supportingText: String? = null
 )
 
 interface IntegrationConfigUiState {
@@ -74,7 +78,9 @@ fun IntegrationConfigPopup(
     uiState: IntegrationConfigUiState,
     actions: IntegrationConfigActions,
     fields: List<IntegrationField>,
-    descriptionText: String
+    descriptionText: String,
+    /** Shown above the fields, e.g. presets or choices that are not text. */
+    extraContent: @Composable () -> Unit = {}
 ) {
     if (!isVisible) return
 
@@ -92,14 +98,22 @@ fun IntegrationConfigPopup(
             )
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                extraContent()
                 fields.forEach { field ->
                     OutlinedTextField(
                         value = field.value,
                         onValueChange = field.onValueChange,
                         label = { Text(field.label, color = TextSecondary) },
                         placeholder = { Text(field.placeholder) },
-                        singleLine = true,
+                        singleLine = field.singleLine,
+                        minLines = if (field.singleLine) 1 else 3,
+                        supportingText = if (field.supportingText != null) {
+                            { Text(field.supportingText, color = TextSecondary) }
+                        } else null,
                         visualTransformation = if (field.isPassword) PasswordVisualTransformation() else VisualTransformation.None,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(8.dp),

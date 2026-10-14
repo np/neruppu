@@ -57,6 +57,9 @@ class MediaUploadRepositoryTest {
         telegramTransport = mockk()
         matrixTransport = mockk()
         httpsTransport = mockk()
+        listOf(telegramTransport, matrixTransport, httpsTransport).forEach {
+            every { it.deliversMedia } returns true
+        }
         mediaUploadRepository = MediaUploadRepositoryImpl(
             context = mockk(),
             sensorRepository = sensorRepository,
@@ -199,6 +202,27 @@ class MediaUploadRepositoryTest {
             uploadedAt = any(),
             failureReason = null
         ) }
+    }
+
+    @Test
+    fun `TC-MUP-08 Capture is kept when the transport does not deliver media`() = runBlocking {
+        val event = Event(
+            id = 1L,
+            sensorType = SensorType.CAMERA_MOTION,
+            description = "Motion",
+            mediaUri = testFile.absolutePath,
+            uploadStatus = UploadStatus.PENDING
+        )
+        every { alertTargetRepository.activeTarget } returns AlertTarget.HTTPS
+        every { httpsTransport.deliversMedia } returns false
+        coEvery { sensorRepository.getPendingUploadEvents(any()) } returns listOf(event)
+        coEvery { httpsTransport.send(any()) } returns Result.success(Unit)
+        coEvery { sensorRepository.updateEventUploadStatus(any(), any(), any(), any(), any()) } just Runs
+
+        assertTrue(mediaUploadRepository.uploadPendingEvents())
+
+        assertTrue(testFile.exists())
+        coVerify { sensorRepository.updateEventUploadStatus(1L, UploadStatus.UPLOADED, "HTTPS", any(), null) }
     }
 
     @Test
