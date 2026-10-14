@@ -69,7 +69,9 @@ fun DashboardScreen(
     // Camera integration
     useFrontCamera: Boolean = false,
     // Captures are encrypted to an age key; guarding cannot start without one
-    encryptionConfigured: Boolean = true
+    encryptionConfigured: Boolean = true,
+    // SystemClock.elapsedRealtime() at which the exit delay ends; 0 when idle
+    armedAtElapsed: Long = 0L
 ) {
     Box(
         modifier = Modifier
@@ -84,7 +86,12 @@ fun DashboardScreen(
             DashboardTopbar()
 
             // Shield Hero Section
-            ShieldHero(isMonitoring = isMonitoring, sessionStartTime = sessionStartTime, lastGuardedTime = lastGuardedTime)
+            ShieldHero(
+                isMonitoring = isMonitoring,
+                sessionStartTime = sessionStartTime,
+                lastGuardedTime = lastGuardedTime,
+                armedAtElapsed = armedAtElapsed
+            )
 
             Column(
                 modifier = Modifier
@@ -199,7 +206,19 @@ fun DashboardTopbar() {
 }
 
 @Composable
-fun ShieldHero(isMonitoring: Boolean, sessionStartTime: Long, lastGuardedTime: Long) {
+fun ShieldHero(isMonitoring: Boolean, sessionStartTime: Long, lastGuardedTime: Long, armedAtElapsed: Long = 0L) {
+    // Ticks once per second while the exit delay runs.
+    var nowElapsed by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
+    LaunchedEffect(isMonitoring, armedAtElapsed) {
+        while (isMonitoring && nowElapsed < armedAtElapsed) {
+            kotlinx.coroutines.delay(250)
+            nowElapsed = android.os.SystemClock.elapsedRealtime()
+        }
+    }
+    val armingRemainingS = if (isMonitoring) ((armedAtElapsed - nowElapsed + 999) / 1000).coerceAtLeast(0) else 0
+    val arming = armingRemainingS > 0
+    val statusColor = if (arming) NeruppuAmber else NeruppuGreen
+
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val pulseAlpha by infiniteTransition.animateFloat(
         initialValue = 1f,
@@ -264,7 +283,11 @@ fun ShieldHero(isMonitoring: Boolean, sessionStartTime: Long, lastGuardedTime: L
         Spacer(modifier = Modifier.height(12.dp))
         Text(stringResource(R.string.dashboard_device_is), color = TextTertiary, style = MaterialTheme.typography.bodyMedium)
         Text(
-            if (isMonitoring) stringResource(R.string.dashboard_guarding) else stringResource(R.string.dashboard_idle),
+            when {
+                arming -> stringResource(R.string.dashboard_arming, armingRemainingS / 60, armingRemainingS % 60)
+                isMonitoring -> stringResource(R.string.dashboard_guarding)
+                else -> stringResource(R.string.dashboard_idle)
+            },
             color = if (isMonitoring) BackgroundPrimary else TextSecondary,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Medium
@@ -279,12 +302,12 @@ fun ShieldHero(isMonitoring: Boolean, sessionStartTime: Long, lastGuardedTime: L
         Row(
             modifier = Modifier
                 .background(
-                    if (isMonitoring) NeruppuGreen.copy(alpha = 0.15f) else TextSecondary.copy(alpha = 0.12f),
+                    if (isMonitoring) statusColor.copy(alpha = 0.15f) else TextSecondary.copy(alpha = 0.12f),
                     CircleShape
                 )
                 .border(
                     0.5.dp,
-                    if (isMonitoring) NeruppuGreen.copy(alpha = 0.3f) else BorderTertiary,
+                    if (isMonitoring) statusColor.copy(alpha = 0.3f) else BorderTertiary,
                     CircleShape
                 )
                 .padding(horizontal = 12.dp, vertical = 6.dp),
@@ -294,11 +317,15 @@ fun ShieldHero(isMonitoring: Boolean, sessionStartTime: Long, lastGuardedTime: L
             Box(
                 modifier = Modifier
                     .size(6.dp)
-                    .background(if (isMonitoring) NeruppuGreen else TextSecondary, CircleShape)
+                    .background(if (isMonitoring) statusColor else TextSecondary, CircleShape)
             )
             Text(
-                if (isMonitoring) stringResource(R.string.dashboard_all_sensors_live) else stringResource(R.string.dashboard_monitoring_off),
-                color = if (isMonitoring) NeruppuGreen else TextSecondary,
+                when {
+                    arming -> stringResource(R.string.dashboard_arming_hint)
+                    isMonitoring -> stringResource(R.string.dashboard_all_sensors_live)
+                    else -> stringResource(R.string.dashboard_monitoring_off)
+                },
+                color = if (isMonitoring) statusColor else TextSecondary,
                 style = MaterialTheme.typography.labelMedium
             )
         }

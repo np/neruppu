@@ -26,7 +26,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.havenapp.neruppu.data.camera.CameraManager
+import org.havenapp.neruppu.domain.model.AlertTarget
 import org.havenapp.neruppu.domain.model.SensorType
+import org.havenapp.neruppu.domain.repository.AlertTargetRepository
 import org.havenapp.neruppu.domain.repository.EncryptionKeyRepository
 import org.havenapp.neruppu.domain.repository.MediaUploadRepository
 import org.havenapp.neruppu.domain.repository.SensorRepository
@@ -70,6 +72,7 @@ class MonitoringServiceTest {
     private val mediaUploadRepository = mockk<MediaUploadRepository>(relaxed = true)
     private val cameraManager = mockk<CameraManager>(relaxed = true)
     private val encryptionKeyRepository = mockk<EncryptionKeyRepository>(relaxed = true)
+    private val alertTargetRepository = mockk<AlertTargetRepository>(relaxed = true)
 
     private lateinit var service: MonitoringService
 
@@ -84,6 +87,7 @@ class MonitoringServiceTest {
         every { androidx.camera.lifecycle.ProcessCameraProvider.getInstance(any()) } returns mockFuture
 
         every { encryptionKeyRepository.isConfigured } returns true
+        every { alertTargetRepository.activeTarget } returns AlertTarget.TELEGRAM
         coEvery { handleUseCase.execute(any()) } returns Result.success(1L)
         coEvery { mediaUploadRepository.enqueueUpload(any()) } just Runs
 
@@ -93,7 +97,7 @@ class MonitoringServiceTest {
         controller.create()
         
         // Manual injection AFTER create() to overwrite Hilt's real objects
-        val fieldNames = listOf("cameraManager", "sensorRepository", "handleSensorEventUseCase", "attachAudioToEventUseCase", "mediaUploadRepository", "encryptionKeyRepository", "serviceScope", "savePhotosPref")
+        val fieldNames = listOf("cameraManager", "sensorRepository", "handleSensorEventUseCase", "attachAudioToEventUseCase", "mediaUploadRepository", "encryptionKeyRepository", "alertTargetRepository", "serviceScope", "savePhotosPref")
         fieldNames.forEach { name ->
             val field = MonitoringService::class.java.getDeclaredField(name)
             field.isAccessible = true
@@ -104,15 +108,30 @@ class MonitoringServiceTest {
                 "attachAudioToEventUseCase" -> field.set(service, attachUseCase)
                 "mediaUploadRepository" -> field.set(service, mediaUploadRepository)
                 "encryptionKeyRepository" -> field.set(service, encryptionKeyRepository)
+                "alertTargetRepository" -> field.set(service, alertTargetRepository)
                 "serviceScope" -> field.set(service, CoroutineScope(testDispatcher + SupervisorJob()))
                 "savePhotosPref" -> field.set(service, false)
             }
         }
     }
 
+    private fun setArmingDelay(seconds: Int) {
+        RuntimeEnvironment.getApplication()
+            .getSharedPreferences("neruppu_prefs", Context.MODE_PRIVATE)
+            .edit().putInt(MonitoringService.PREF_ARMING_DELAY_SECONDS, seconds).commit()
+    }
+
+    private fun motionIntent() =
+        Intent(RuntimeEnvironment.getApplication(), MonitoringService::class.java).apply {
+            action = "TRIGGER_MOTION_EVENT"
+            putExtra("motion_level", 20.0)
+        }
+
     @Test
-    fun `TC-SVC-01 Event cooldown suppresses duplicate events`() = runTest(testDispatcher) {
+    fun `TC-SVC-01 Event cooldown suppresses duplicate events`() {
         org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofSeconds(10))
+        setArmingDelay(0)
+        service.toggleMonitoring()
         
         val intent = Intent(RuntimeEnvironment.getApplication(), MonitoringService::class.java).apply {
             action = "TRIGGER_MOTION_EVENT"
@@ -149,6 +168,44 @@ class MonitoringServiceTest {
         assertEquals(false, service.toggleMonitoring())
         assertFalse(service.isMonitoring.value)
         verify(exactly = 0) { cameraManager.bindCamera(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `TC-SVC-06 Events are ignored during the exit delay`() {
+        setArmingDelay(60)
+
+        service.toggleMonitoring()
+        service.onStartCommand(motionIntent(), 0, 1)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+
+        assertTrue(service.isMonitoring.value)
+        assertTrue(service.armedAtElapsed.value - android.os.SystemClock.elapsedRealtime() >= 59_000)
+        coVerify(exactly = 0) { handleUseCase.execute(any()) }
+    }
+
+    @Test
+    fun `TC-SVC-07 Events are handled once the exit delay has elapsed`() {
+        setArmingDelay(60)
+        service.toggleMonitoring()
+
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofSeconds(61))
+        service.onStartCommand(motionIntent(), 0, 1)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+
+        coVerify(exactly = 1) { handleUseCase.execute(any()) }
+    }
+
+    @Test
+    fun `TC-SVC-08 Stopping resets the exit delay and ignores events`() {
+        setArmingDelay(0)
+        service.toggleMonitoring()
+        service.toggleMonitoring()
+
+        service.onStartCommand(motionIntent(), 0, 1)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+
+        assertEquals(0L, service.armedAtElapsed.value)
+        coVerify(exactly = 0) { handleUseCase.execute(any()) }
     }
 
     @Test

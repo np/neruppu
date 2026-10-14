@@ -103,6 +103,7 @@ import org.havenapp.neruppu.core.ui.theme.NeruppuTheme
 import org.havenapp.neruppu.core.ui.theme.TextPrimary
 import org.havenapp.neruppu.core.ui.theme.TextSecondary
 import org.havenapp.neruppu.ui.components.ScreenHeader
+import kotlin.math.roundToInt
 
 @Composable
 fun SettingsScreen(
@@ -120,6 +121,8 @@ fun SettingsScreen(
     onPushAlertsToggle: (Boolean) -> Unit,
     savePhotos: Boolean,
     onSavePhotosToggle: (Boolean) -> Unit,
+    armingDelaySeconds: Int = 60,
+    onArmingDelayChange: (Int) -> Unit = {},
     telegramViewModel: TelegramSettingsViewModel = hiltViewModel(),
     matrixViewModel: MatrixSettingsViewModel = hiltViewModel(),
     httpsViewModel: HttpsSettingsViewModel = hiltViewModel(),
@@ -295,6 +298,23 @@ fun SettingsScreen(
                         onValueChange = onSoundThresholdChange,
                         displayValue = "${(soundThreshold * 100).toInt()} dB",
                         color = NeruppuBlue
+                    )
+                }
+
+                SectionTitle("Exit delay")
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(BackgroundSecondary, RoundedCornerShape(12.dp))
+                        .border(0.5.dp, BorderTertiary, RoundedCornerShape(12.dp))
+                        .padding(12.dp)
+                ) {
+                    ArmingDelaySlider(armingDelaySeconds, onArmingDelayChange)
+                    Text(
+                        "After Start, events are ignored for this long so you can leave the room. " +
+                            "A notification tells you when guarding is active.",
+                        color = TextSecondary,
+                        style = MaterialTheme.typography.bodySmall
                     )
                 }
 
@@ -880,6 +900,46 @@ fun SettingRow(
                 uncheckedBorderColor = BorderTertiary
             ),
             modifier = Modifier.scale(0.8f)
+        )
+    }
+}
+
+private val ARMING_DELAY_STEPS = listOf(0, 15, 30, 60, 120, 300, 600)
+
+fun formatArmingDelay(seconds: Int): String = when {
+    seconds == 0 -> "None"
+    seconds < 60 -> "${seconds} s"
+    seconds % 60 == 0 -> "${seconds / 60} min"
+    else -> "${seconds / 60} min ${seconds % 60} s"
+}
+
+@Composable
+fun ArmingDelaySlider(seconds: Int, onChange: (Int) -> Unit) {
+    // Snap to the nearest step so a value stored by an older build still maps.
+    val index = ARMING_DELAY_STEPS.indices.minByOrNull { kotlin.math.abs(ARMING_DELAY_STEPS[it] - seconds) } ?: 3
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("Wait before guarding", color = TextSecondary, style = MaterialTheme.typography.labelMedium)
+            Text(
+                formatArmingDelay(ARMING_DELAY_STEPS[index]),
+                color = NeruppuOrange,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Medium
+            )
+        }
+        androidx.compose.material3.Slider(
+            value = index.toFloat(),
+            onValueChange = { onChange(ARMING_DELAY_STEPS[it.roundToInt().coerceIn(ARMING_DELAY_STEPS.indices)]) },
+            valueRange = 0f..(ARMING_DELAY_STEPS.size - 1).toFloat(),
+            steps = ARMING_DELAY_STEPS.size - 2,
+            colors = androidx.compose.material3.SliderDefaults.colors(
+                thumbColor = Color.White,
+                activeTrackColor = NeruppuOrange,
+                inactiveTrackColor = BorderTertiary
+            )
         )
     }
 }

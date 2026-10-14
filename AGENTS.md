@@ -20,6 +20,8 @@ The project follows **Clean Architecture** principles and is structured into a m
 *   **Accelerometer**: Detects device movement or vibration. Uses `SignificantMotion` hardware trigger where available for low-power monitoring.
 *   **Ambient Light**: Detects sudden shifts in luminosity (e.g., a flashlight in a dark room or a door opening).
 
+*   **Exit delay (arming)**: after Start, `MonitoringService` ignores every event until `armedAtElapsed` (`SystemClock.elapsedRealtime()`), default 60 s, set in Settings → Exit delay (`arming_delay_seconds` in `neruppu_prefs`, 0–10 min). Sensors already run so baselines settle; `isArmed()` gates `handleEvent`, the camera callback and the microphone trigger. The ongoing notification shows a system countdown; a "Guarding active" notification (channel `guard_status_channel`) is posted when it ends; the dashboard shows "Arming in m:ss".
+
 ## 4. Alerting Protocol (Matrix)
 Remote alerts are sent via the **Matrix Protocol** using a lightweight Ktor-based client (`MatrixApiClient`).
 *   **Process**: Initial text alert sent -> Media (Image/Audio) uploaded to Homeserver -> Media event sent.

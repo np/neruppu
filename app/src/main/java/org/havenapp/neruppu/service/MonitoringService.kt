@@ -30,6 +30,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.os.Process
+import android.os.SystemClock
 import android.util.Log
 import org.havenapp.neruppu.BuildConfig
 import androidx.core.app.NotificationCompat
@@ -110,6 +111,20 @@ class MonitoringService : LifecycleService() {
 
     private val _isMonitoring = MutableStateFlow(false)
     val isMonitoring: StateFlow<Boolean> = _isMonitoring
+
+    /**
+     * Exit delay: monitoring is on but events are ignored until this
+     * SystemClock.elapsedRealtime() deadline, so the user can leave the room.
+     * 0 when idle. Sensors already run meanwhile, which lets their baselines
+     * settle before the first event can fire.
+     */
+    private val _armedAtElapsed = MutableStateFlow(0L)
+    val armedAtElapsed: StateFlow<Long> = _armedAtElapsed
+    private var armingJob: Job? = null
+
+    /** True once monitoring is on and the exit delay has elapsed. */
+    private fun isArmed(): Boolean =
+        _isMonitoring.value && SystemClock.elapsedRealtime() >= _armedAtElapsed.value
 
     private val _sessionStartTime = MutableStateFlow(0L)
     val sessionStartTime: StateFlow<Long> = _sessionStartTime
@@ -348,9 +363,12 @@ class MonitoringService : LifecycleService() {
                 .remove("last_guarded_time")
                 .apply()
             startWakeLockIfNeeded()
-            updateNotification()
+            startArming()
         } else {
             Log.d("MonitoringService", "Monitoring DEACTIVATED")
+            armingJob?.cancel()
+            armingJob = null
+            _armedAtElapsed.value = 0L
             _lastGuardedTime.value = now
             getSharedPreferences("neruppu_prefs", MODE_PRIVATE)
                 .edit()
@@ -362,6 +380,24 @@ class MonitoringService : LifecycleService() {
         }
         startMonitoringIfNeeded()
         return true
+    }
+
+    private fun startArming() {
+        val delayMs = getSharedPreferences("neruppu_prefs", MODE_PRIVATE)
+            .getInt(PREF_ARMING_DELAY_SECONDS, DEFAULT_ARMING_DELAY_SECONDS)
+            .coerceIn(0, MAX_ARMING_DELAY_SECONDS) * 1000L
+        _armedAtElapsed.value = SystemClock.elapsedRealtime() + delayMs
+        updateNotification()
+
+        armingJob?.cancel()
+        armingJob = serviceScope.launch {
+            delay(delayMs)
+            if (!_isMonitoring.value) return@launch
+            Log.i("MonitoringService", "Exit delay elapsed: guarding ARMED")
+            updateNotification()
+            notificationManager.notify(ARMED_NOTIFICATION_ID, createArmedNotification())
+        }
+        Log.d("MonitoringService", "Arming: events ignored for ${delayMs / 1000}s")
     }
 
     private fun stopMonitoring() {
@@ -395,7 +431,7 @@ class MonitoringService : LifecycleService() {
                 sensitivity = (sensitivityPref * 30).toInt().coerceIn(5, 30),
                 onMotionDetected = { level ->
                     _motionLevel.value = level
-                    if (_isMonitoring.value && level > 15.0) {
+                    if (isArmed() && level > 15.0) {
                         Log.v("MonitoringService", "THRESHOLD EXCEEDED: $level")
                         serviceScope.launch {
                             handleEvent(SensorType.CAMERA_MOTION, "Camera motion detected: Level ${String.format("%.2f", level)}")
@@ -499,7 +535,7 @@ class MonitoringService : LifecycleService() {
                     }
 
                     // CRITICAL: Check threshold BEFORE compareAndSet to avoid blocking
-                    if (_isMonitoring.value && spike > threshold && isRecordingAudio.compareAndSet(false, true)) {
+                    if (isArmed() && spike > threshold && isRecordingAudio.compareAndSet(false, true)) {
                         Log.i("MonitoringService", "AUDIO TRIGGER (SPIKE): $spike (Threshold: $threshold, Fast: $fastBaseline, Slow: $slowBaseline)")
                         serviceScope.launch {
                             val eventId = handleEvent(SensorType.MICROPHONE, "Acoustic spike detected: ${spike.toInt()}")
@@ -573,6 +609,10 @@ class MonitoringService : LifecycleService() {
 
     private suspend fun handleEvent(type: SensorType, description: String): Long {
         println("Neruppu: handleEvent type=$type")
+        if (!isArmed()) {
+            Log.d("MonitoringService", "Event ignored, not armed (exit delay or idle): $type")
+            return -1
+        }
         val now = System.currentTimeMillis()
         val lastTime = lastEventTime[type] ?: 0L
         
@@ -654,6 +694,13 @@ class MonitoringService : LifecycleService() {
         )
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(channel)
+        // Separate channel so "guarding is now active" can be audible while the
+        // ongoing service notification stays silent; tunable in system settings.
+        manager.createNotificationChannel(NotificationChannel(
+            STATUS_CHANNEL_ID,
+            "Guard status",
+            NotificationManager.IMPORTANCE_DEFAULT
+        ))
     }
 
     private fun updateNotification() {
@@ -681,10 +728,12 @@ class MonitoringService : LifecycleService() {
             this, 0, stopIntent, PendingIntent.FLAG_IMMUTABLE
         )
 
-        val contentText = if (_isMonitoring.value) {
-            "System is active and monitoring sensors"
-        } else {
-            "System is idle. Tap START to begin monitoring."
+        val remainingMs = _armedAtElapsed.value - SystemClock.elapsedRealtime()
+        val arming = _isMonitoring.value && remainingMs > 0
+        val contentText = when {
+            arming -> "Exit delay: leave the room before guarding starts"
+            _isMonitoring.value -> "System is active and monitoring sensors"
+            else -> "System is idle. Tap START to begin monitoring."
         }
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
@@ -693,6 +742,25 @@ class MonitoringService : LifecycleService() {
             .setSmallIcon(R.drawable.ic_stat_security)
             .setOngoing(true)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop Service", stopPendingIntent)
+            .apply {
+                if (arming) {
+                    // The system renders the countdown: no per-second updates.
+                    setWhen(System.currentTimeMillis() + remainingMs)
+                    setShowWhen(true)
+                    setUsesChronometer(true)
+                    setChronometerCountDown(true)
+                }
+            }
+            .build()
+    }
+
+    private fun createArmedNotification(): Notification {
+        return NotificationCompat.Builder(this, STATUS_CHANNEL_ID)
+            .setContentTitle("Neruppu Security")
+            .setContentText("Guarding active: events are now recorded")
+            .setSmallIcon(R.drawable.ic_stat_security)
+            .setAutoCancel(true)
+            .setTimeoutAfter(ARMED_NOTIFICATION_TIMEOUT_MS)
             .build()
     }
 
@@ -712,6 +780,7 @@ class MonitoringService : LifecycleService() {
             .unregisterOnSharedPreferenceChangeListener(prefsListener)
         stopWakeLockIfNeeded()
         heartbeatJob?.cancel()
+        armingJob?.cancel()
         sensorsJob?.cancel()
         uiSensorsJob?.cancel()
         serviceScope.cancel()
@@ -721,7 +790,14 @@ class MonitoringService : LifecycleService() {
     companion object {
         const val NOTIFICATION_ID = 1
         const val ERROR_NOTIFICATION_ID = 2
+        const val ARMED_NOTIFICATION_ID = 3
         const val CHANNEL_ID = "monitoring_channel"
+        const val STATUS_CHANNEL_ID = "guard_status_channel"
+
+        const val PREF_ARMING_DELAY_SECONDS = "arming_delay_seconds"
+        const val DEFAULT_ARMING_DELAY_SECONDS = 60
+        const val MAX_ARMING_DELAY_SECONDS = 15 * 60
+        private const val ARMED_NOTIFICATION_TIMEOUT_MS = 10 * 60 * 1000L
         const val ACTION_STOP_SERVICE = "org.havenapp.neruppu.STOP_SERVICE"
     }
 }

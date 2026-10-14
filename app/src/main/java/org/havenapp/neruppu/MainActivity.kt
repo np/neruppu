@@ -200,6 +200,12 @@ class MainActivity : ComponentActivity() {
         var pushAlerts by remember { mutableStateOf(prefs.getBoolean("push_alerts", true)) }
         var savePhotos by remember { mutableStateOf(prefs.getBoolean("save_photos", true)) }
         var useFrontCamera by remember { mutableStateOf(prefs.getBoolean("use_front_camera", false)) }
+        var armingDelaySeconds by remember {
+            mutableIntStateOf(prefs.getInt(
+                MonitoringService.PREF_ARMING_DELAY_SECONDS,
+                MonitoringService.DEFAULT_ARMING_DELAY_SECONDS
+            ))
+        }
 
         Scaffold(
             bottomBar = {
@@ -261,6 +267,7 @@ class MainActivity : ComponentActivity() {
                             val lightLevel by service.lightLevel.collectAsState()
                             val sessionStartTime by service.sessionStartTime.collectAsState()
                             val lastGuardedTime by service.lastGuardedTime.collectAsState()
+                            val armedAtElapsed by service.armedAtElapsed.collectAsState()
 
                             DashboardScreen(
                                 isMonitoring = isMonitoring,
@@ -288,6 +295,7 @@ class MainActivity : ComponentActivity() {
                                     },
                                 useFrontCamera = useFrontCamera,
                                 encryptionConfigured = encryptionUiState.isConfigured,
+                                armedAtElapsed = armedAtElapsed,
                                 sessionStartTime = sessionStartTime,
                                 lastGuardedTime = lastGuardedTime
                             )
@@ -347,6 +355,11 @@ class MainActivity : ComponentActivity() {
                             onSavePhotosToggle = {
                                 savePhotos = it
                                 prefs.edit().putBoolean("save_photos", it).apply()
+                            },
+                            armingDelaySeconds = armingDelaySeconds,
+                            onArmingDelayChange = {
+                                armingDelaySeconds = it
+                                prefs.edit().putInt(MonitoringService.PREF_ARMING_DELAY_SECONDS, it).apply()
                             },
                             encryptionViewModel = encryptionViewModel
                         )

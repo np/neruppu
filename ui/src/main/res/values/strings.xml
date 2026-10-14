@@ -7,6 +7,8 @@
     <string name="dashboard_brand_ppu">ppu</string>
     <string name="dashboard_device_is">Device is</string>
     <string name="dashboard_guarding">Guarding</string>
+    <string name="dashboard_arming">Arming in %1$d:%2$02d</string>
+    <string name="dashboard_arming_hint">Leave the room now</string>
     <string name="dashboard_idle">Idle</string>
     <string name="dashboard_all_sensors_live">All sensors live</string>
     <string name="dashboard_monitoring_off">Monitoring off</string>
