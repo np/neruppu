@@ -52,7 +52,11 @@ import org.havenapp.neruppu.core.ui.theme.TextPrimary
 import org.havenapp.neruppu.core.ui.theme.TextSecondary
 import org.havenapp.neruppu.data.local.SharedPrefsAlertGroupingStore
 import org.havenapp.neruppu.service.MonitoringService
+import org.havenapp.neruppu.domain.model.AlertTarget
+import org.havenapp.neruppu.domain.repository.AlertTargetRepository
 import org.havenapp.neruppu.ui.features.dashboard.DashboardScreen
+import org.havenapp.neruppu.ui.features.dashboard.StartWarningsDialog
+import javax.inject.Inject
 import org.havenapp.neruppu.ui.features.logs.LogsScreen
 import org.havenapp.neruppu.ui.features.logs.LogsViewModel
 import org.havenapp.neruppu.ui.features.permission.PermissionScreen
@@ -62,6 +66,9 @@ import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject
+    lateinit var alertTargetRepository: AlertTargetRepository
 
     private val monitoringService = mutableStateOf<MonitoringService?>(null)
     private var isBound = false
@@ -281,6 +288,24 @@ class MainActivity : ComponentActivity() {
                             val sessionStartTime by service.sessionStartTime.collectAsState()
                             val lastGuardedTime by service.lastGuardedTime.collectAsState()
                             val armedAtElapsed by service.armedAtElapsed.collectAsState()
+                            var startWarnings by remember { mutableStateOf<List<StartWarning>>(emptyList()) }
+
+                            val startGuarding = {
+                                context.startForegroundService(Intent(context, MonitoringService::class.java))
+                                service.toggleMonitoring()
+                            }
+
+                            if (startWarnings.isNotEmpty()) {
+                                StartWarningsDialog(
+                                    noInternet = StartWarning.NO_INTERNET in startWarnings,
+                                    notCharging = StartWarning.NOT_CHARGING in startWarnings,
+                                    onStartAnyway = {
+                                        startWarnings = emptyList()
+                                        startGuarding()
+                                    },
+                                    onCancel = { startWarnings = emptyList() }
+                                )
+                            }
 
                             DashboardScreen(
                                 isMonitoring = isMonitoring,
@@ -301,10 +326,18 @@ class MainActivity : ComponentActivity() {
                                             if (!encryptionUiState.isConfigured) {
                                                 return@DashboardScreen
                                             }
-                                            val intent = Intent(context, MonitoringService::class.java)
-                                            context.startForegroundService(intent)
+                                            val warnings = StartChecks.warnings(
+                                                context,
+                                                alertChannelActive = alertTargetRepository.activeTarget != AlertTarget.NONE
+                                            )
+                                            if (warnings.isNotEmpty()) {
+                                                startWarnings = warnings
+                                            } else {
+                                                startGuarding()
+                                            }
+                                        } else {
+                                            service.toggleMonitoring()
                                         }
-                                        service.toggleMonitoring()
                                     },
                                 useFrontCamera = useFrontCamera,
                                 encryptionConfigured = encryptionUiState.isConfigured,
