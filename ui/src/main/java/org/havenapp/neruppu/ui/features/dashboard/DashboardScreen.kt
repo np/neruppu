@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -66,7 +67,9 @@ fun DashboardScreen(
     sessionStartTime: Long = 0L,
     lastGuardedTime: Long = 0L,
     // Camera integration
-    useFrontCamera: Boolean = false
+    useFrontCamera: Boolean = false,
+    // Captures are encrypted to an age key; guarding cannot start without one
+    encryptionConfigured: Boolean = true
 ) {
     Box(
         modifier = Modifier
@@ -129,13 +132,26 @@ fun DashboardScreen(
                 
                 Spacer(modifier = Modifier.height(12.dp))
 
+                if (!isMonitoring && !encryptionConfigured) {
+                    Text(
+                        stringResource(R.string.dashboard_no_encryption_key),
+                        color = TextSecondary,
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp)
+                    )
+                }
+
                 BigButton(
                     text = if (isMonitoring) stringResource(R.string.dashboard_stop_monitoring) else stringResource(R.string.dashboard_start_guarding),
                     iconPainter = if (isMonitoring) null else painterResource(id = R.drawable.neruppu_brand_logo),
                     iconVector = if (isMonitoring) Icons.Default.Stop else null,
                     onClick = onToggleMonitoring,
                     secondary = isMonitoring,
-                    backgroundColor = if (isMonitoring) BackgroundPrimary.copy(alpha = 0.8f) else null
+                    backgroundColor = if (isMonitoring) BackgroundPrimary.copy(alpha = 0.8f) else null,
+                    enabled = isMonitoring || encryptionConfigured
                 )
             }
         }

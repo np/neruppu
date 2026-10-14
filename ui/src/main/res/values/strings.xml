@@ -2,6 +2,7 @@
     <string name="dashboard_live_sensors">LIVE SENSORS</string>
     <string name="dashboard_stop_monitoring">Stop monitoring</string>
     <string name="dashboard_start_guarding">Start guarding</string>
+    <string name="dashboard_no_encryption_key">Add an age public key in Settings → Encryption to start guarding</string>
     <string name="dashboard_brand_neru">neru</string>
     <string name="dashboard_brand_ppu">ppu</string>
     <string name="dashboard_device_is">Device is</string>

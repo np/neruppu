@@ -19,7 +19,7 @@ package org.havenapp.neruppu.domain.model
 
 data class MediaFile(
     val absolutePath: String,
-    val mimeType: String,        // "image/jpeg" or "audio/mp4"
+    val mimeType: String,        // "application/age-encryption" for captures; "image/jpeg" / "audio/mp4" otherwise
     val sizeBytes: Long,
     val timestamp: Long
 )

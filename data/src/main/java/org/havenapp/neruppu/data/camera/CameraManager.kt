@@ -18,7 +18,6 @@
 package org.havenapp.neruppu.data.camera
 
 import android.content.Context
-import android.net.Uri
 import android.util.Log
 import android.util.Size
 import androidx.camera.core.*
@@ -33,9 +32,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.havenapp.neruppu.data.camera.analyzer.MotionAnalyzer
 import org.havenapp.neruppu.data.camera.analyzer.ContextBatteryLevelProvider
-import java.io.File
-import java.text.SimpleDateFormat
-import java.util.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
@@ -69,28 +65,36 @@ class CameraManager(private val context: Context) {
         }, ContextCompat.getMainExecutor(context))
     }
 
-    suspend fun capturePhoto(): Uri? = mutex.withLock {
+    /**
+     * Captures a JPEG into memory. Returns null on failure.
+     *
+     * Nothing readable touches the disk: the returned array is the only
+     * plaintext copy, and the caller hands it straight to
+     * MediaStorageRepository.saveImage(), which encrypts it.
+     */
+    suspend fun capturePhotoBytes(): ByteArray? = mutex.withLock {
         val capture = imageCapture ?: run {
             Log.e("CameraManager", "Cannot capture: imageCapture is null. Camera might not be bound to service.")
             return null
         }
-        
-        return suspendCancellableCoroutine { continuation ->
-            val name = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss-SSS", Locale.US)
-                .format(System.currentTimeMillis())
-            
-            val outputDir = File(context.filesDir, "captures").apply { mkdirs() }
-            val file = File(outputDir, "$name.jpg")
-            val outputOptions = ImageCapture.OutputFileOptions.Builder(file).build()
 
-            Log.d("CameraManager", "Taking picture for security event: ${file.name}")
+        return suspendCancellableCoroutine { continuation ->
             capture.takePicture(
-                outputOptions,
                 ContextCompat.getMainExecutor(context),
-                object : ImageCapture.OnImageSavedCallback {
-                    override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                        Log.i("CameraManager", "PHOTO SAVED: ${file.absolutePath}")
-                        if (continuation.isActive) continuation.resume(Uri.fromFile(file))
+                object : ImageCapture.OnImageCapturedCallback() {
+                    override fun onCaptureSuccess(image: ImageProxy) {
+                        val bytes = try {
+                            // ImageCapture without OutputFileOptions yields a single
+                            // JPEG-encoded plane.
+                            val buffer = image.planes[0].buffer
+                            ByteArray(buffer.remaining()).also { buffer.get(it) }
+                        } catch (e: Exception) {
+                            Log.e("CameraManager", "Failed to read captured image", e)
+                            null
+                        } finally {
+                            image.close()
+                        }
+                        if (continuation.isActive) continuation.resume(bytes)
                     }
 
                     override fun onError(exception: ImageCaptureException) {

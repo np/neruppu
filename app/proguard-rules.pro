@@ -16,3 +16,7 @@
 
 # Hilt
 -keep class dagger.hilt.android.internal.** { *; }
+
+# gomobile (age-encryption): JNI looks these up by name
+-keep class go.** { *; }
+-keep class neruppuage.** { *; }

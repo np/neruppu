@@ -55,6 +55,7 @@ import org.havenapp.neruppu.ui.features.dashboard.DashboardScreen
 import org.havenapp.neruppu.ui.features.logs.LogsScreen
 import org.havenapp.neruppu.ui.features.logs.LogsViewModel
 import org.havenapp.neruppu.ui.features.permission.PermissionScreen
+import org.havenapp.neruppu.ui.features.settings.EncryptionSettingsViewModel
 import org.havenapp.neruppu.ui.features.settings.SettingsScreen
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -183,6 +184,10 @@ class MainActivity : ComponentActivity() {
     private fun MainAppScreen() {
         var selectedTab by remember { mutableIntStateOf(0) }
         val logsViewModel: LogsViewModel = hiltViewModel()
+        // Same activity-scoped instance that SettingsScreen edits, so the
+        // dashboard reacts as soon as a key is saved.
+        val encryptionViewModel: EncryptionSettingsViewModel = hiltViewModel()
+        val encryptionUiState by encryptionViewModel.uiState.collectAsState()
 
         val context = LocalContext.current
         val prefs = context.getSharedPreferences("neruppu_prefs", MODE_PRIVATE)
@@ -271,12 +276,18 @@ class MainActivity : ComponentActivity() {
                                                 hasPermissions = false
                                                 return@DashboardScreen
                                             }
+                                            // Checked before startForegroundService(): a refused start
+                                            // would never reach startForeground() and crash the service.
+                                            if (!encryptionUiState.isConfigured) {
+                                                return@DashboardScreen
+                                            }
                                             val intent = Intent(context, MonitoringService::class.java)
                                             context.startForegroundService(intent)
                                         }
                                         service.toggleMonitoring()
                                     },
                                 useFrontCamera = useFrontCamera,
+                                encryptionConfigured = encryptionUiState.isConfigured,
                                 sessionStartTime = sessionStartTime,
                                 lastGuardedTime = lastGuardedTime
                             )
@@ -336,7 +347,8 @@ class MainActivity : ComponentActivity() {
                             onSavePhotosToggle = {
                                 savePhotos = it
                                 prefs.edit().putBoolean("save_photos", it).apply()
-                            }
+                            },
+                            encryptionViewModel = encryptionViewModel
                         )
                     }
                 }

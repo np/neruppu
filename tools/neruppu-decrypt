@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# neruppu-decrypt — decrypt captures produced by the age build of Neruppu.
+#
+# This script is a convenience, not a requirement: the files are plain age
+# files, so `age -d -i key.txt capture.jpg.age > capture.jpg` works just as
+# well, with any age implementation (Go, rage, pyrage, a WASM page).
+#
+#   neruppu-decrypt -i ~/.neruppu/key.txt capture.jpg.age [more.age ...]
+#   neruppu-decrypt -i key.txt ~/Downloads/*.age
+#
+# Output is written next to each input with the .age suffix removed.
+
+set -euo pipefail
+
+identity=""
+outdir=""
+
+usage() {
+    cat >&2 <<'EOF'
+usage: neruppu-decrypt -i IDENTITY_FILE [-o OUTDIR] FILE.age [FILE.age ...]
+
+  -i  age identity (private key) file
+  -o  output directory (default: alongside each input)
+
+Setup, once:
+  age-keygen -o ~/.neruppu/key.txt      # prints the age1... public key
+                                        # paste that into Neruppu's settings
+EOF
+    exit 2
+}
+
+while getopts ":i:o:h" opt; do
+    case "$opt" in
+        i) identity="$OPTARG" ;;
+        o) outdir="$OPTARG" ;;
+        h) usage ;;
+        *) usage ;;
+    esac
+done
+shift $((OPTIND - 1))
+
+[ -n "$identity" ] || usage
+[ "$#" -gt 0 ] || usage
+
+command -v age >/dev/null 2>&1 || {
+    echo "neruppu-decrypt: 'age' not found (apt install age / brew install age)" >&2
+    exit 1
+}
+
+[ -r "$identity" ] || { echo "neruppu-decrypt: cannot read identity $identity" >&2; exit 1; }
+
+# A private key readable by others is a configuration error worth shouting about.
+perms=$(stat -c '%a' "$identity" 2>/dev/null || stat -f '%A' "$identity" 2>/dev/null || echo "")
+case "$perms" in
+    *[1-7][1-7]) echo "neruppu-decrypt: warning: $identity is group/world readable (chmod 600)" >&2 ;;
+esac
+
+[ -z "$outdir" ] || mkdir -p "$outdir"
+
+status=0
+for in_file in "$@"; do
+    if [ ! -r "$in_file" ]; then
+        echo "skip: $in_file (unreadable)" >&2
+        status=1
+        continue
+    fi
+
+    base=$(basename "$in_file")
+    case "$base" in
+        *.age) stem="${base%.age}" ;;
+        *)     stem="$base.out" ;;   # not named .age; still try
+    esac
+
+    if [ -n "$outdir" ]; then
+        out="$outdir/$stem"
+    else
+        out="$(dirname "$in_file")/$stem"
+    fi
+
+    # Decrypt to a temp file first: a failed decryption must not leave a
+    # half-written file that looks like a valid capture.
+    tmp=$(mktemp "${out}.partial.XXXXXX")
+    if age -d -i "$identity" "$in_file" > "$tmp" 2>/dev/null; then
+        mv "$tmp" "$out"
+        printf '%s -> %s (%s bytes)\n' "$base" "$out" "$(wc -c < "$out" | tr -d ' ')"
+    else
+        rm -f "$tmp"
+        echo "FAILED: $base" >&2
+        echo "  wrong key, or the capture was interrupted before the app could" >&2
+        echo "  finalize the age stream (an unfinalized stream is unrecoverable)." >&2
+        status=1
+    fi
+done
+
+exit $status

@@ -114,10 +114,12 @@ fun BigButton(
     iconVector: ImageVector? = null,
     onClick: () -> Unit,
     secondary: Boolean = false,
-    backgroundColor: Color? = null
+    backgroundColor: Color? = null,
+    enabled: Boolean = true
 ) {
     Button(
         onClick = onClick,
+        enabled = enabled,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
         colors = ButtonDefaults.buttonColors(

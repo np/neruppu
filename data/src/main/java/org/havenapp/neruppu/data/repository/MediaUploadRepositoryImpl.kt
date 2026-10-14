@@ -22,6 +22,7 @@ import org.havenapp.neruppu.data.BuildConfig
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.havenapp.neruppu.data.storage.MediaStorageRepositoryImpl
 import org.havenapp.neruppu.data.worker.MediaUploadWorker
 import org.havenapp.neruppu.domain.di.MatrixTransport
 import org.havenapp.neruppu.domain.di.TelegramTransport
@@ -197,6 +198,8 @@ class MediaUploadRepositoryImpl @Inject constructor(
 
     private fun guessMimeType(path: String): String {
         return when {
+            // First: neruppu_motion_123.jpg.age must not match the .jpg arm.
+            path.endsWith(".age", ignoreCase = true) -> MediaStorageRepositoryImpl.MIME_AGE
             path.endsWith(".jpg", ignoreCase = true) || path.endsWith(".jpeg", ignoreCase = true) -> "image/jpeg"
             path.endsWith(".png", ignoreCase = true) -> "image/png"
             path.endsWith(".mp4", ignoreCase = true) -> "audio/mp4"

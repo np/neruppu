@@ -30,4 +30,17 @@ object AlertMessageFormatter {
         val time = TIME_FORMATTER.format(Instant.ofEpochMilli(payload.timestamp))
         return "[Neruppu] Security Alert: ${payload.message} at $time"
     }
+
+    /**
+     * Caption for age-encrypted payloads. It travels in clear next to the blob,
+     * so it says the minimum: no sensor type ("microphone" vs "motion" tells an
+     * observer what happened in the room), only the time.
+     */
+    fun formatOpaque(payload: AlertPayload): String {
+        val time = TIME_FORMATTER.format(Instant.ofEpochMilli(payload.timestamp))
+        return "[Neruppu] Alert at $time"
+    }
+
+    /** Upload filename for an encrypted blob: reveals nothing about its content. */
+    fun opaqueFileName(payload: AlertPayload): String = "${payload.timestamp}.age"
 }

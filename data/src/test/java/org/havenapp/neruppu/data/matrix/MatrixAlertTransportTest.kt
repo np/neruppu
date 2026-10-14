@@ -19,6 +19,7 @@ package org.havenapp.neruppu.data.matrix
 
 import io.mockk.*
 import kotlinx.coroutines.runBlocking
+import org.havenapp.neruppu.data.storage.MediaStorageRepositoryImpl
 import org.havenapp.neruppu.domain.model.AlertPayload
 import org.havenapp.neruppu.domain.model.MediaFile
 import org.havenapp.neruppu.domain.model.SensorType
@@ -73,6 +74,36 @@ class MatrixAlertTransportTest {
             apiClient.uploadMedia(match { it.contentEquals(byteArrayOf(1, 2, 3)) }, "image/jpeg", any())
             apiClient.sendImageEvent("mxc://server/id", any(), "image/jpeg", any())
         }
+    }
+
+    @Test
+    fun `TC-MX-10 Encrypted blob is uploaded as opaque m_file`() = runBlocking {
+        val file = tempFolder.newFile("neruppu_motion_1000.jpg.age")
+        file.writeBytes(byteArrayOf(4, 5, 6))
+
+        val payload = AlertPayload.MediaAlert(
+            SensorType.CAMERA_MOTION,
+            "Camera motion detected",
+            MediaFile(file.absolutePath, MediaStorageRepositoryImpl.MIME_AGE, 3L, 1000L),
+            1000L
+        )
+
+        coEvery { apiClient.sendTextEvent(any(), any()) } returns Result.success(Unit)
+        coEvery { apiClient.uploadMedia(any(), any(), any()) } returns Result.success("mxc://server/id")
+        coEvery { apiClient.sendFileEvent(any(), any(), any(), any()) } returns Result.success(Unit)
+
+        assertTrue(transport.send(payload).isSuccess)
+
+        coVerifyOrder {
+            apiClient.sendTextEvent(match { !it.contains("motion", ignoreCase = true) }, any())
+            apiClient.uploadMedia(
+                match { it.contentEquals(byteArrayOf(4, 5, 6)) },
+                "application/octet-stream",
+                "1000.age"
+            )
+            apiClient.sendFileEvent("mxc://server/id", "1000.age", any(), any())
+        }
+        coVerify(exactly = 0) { apiClient.sendImageEvent(any(), any(), any(), any()) }
     }
 
     @Test

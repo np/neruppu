@@ -29,12 +29,15 @@ Remote alerts are sent via the **Matrix Protocol** using a lightweight Ktor-base
 *   **Offline-First**: All logs and media are stored locally in the `Downloads/Neruppu` folder (via MediaStore) and an internal Room database.
 *   **Media Cleanup**: When clearing logs, users can optionally trigger a physical file deletion for all associated media.
 *   **Stealth**: The `MonitoringService` runs as a Foreground Service with a sticky notification, ensuring the OS does not kill it during active guarding.
+*   **Encryption at capture (age)**: Photos and audio are encrypted to an age X25519 public key (Settings → Encryption) before reaching `filesDir/captures/` as plain `.age` files (`*.jpg.age`, `*.mp4.age`). The device never holds the private key, so the Events tab shows a lock placeholder instead of previews; decrypt with `age -d -i key.txt` or `tools/neruppu-decrypt`. Monitoring refuses to start without a key. Blobs are uploaded as Telegram documents / Matrix `m.file` with an opaque caption (time only) and filename (`<timestamp>.age`). Go binding in `age-encryption/` (gomobile). Build environment: `nix develop` then `./gradlew assembleDebug` (the flake builds the AAR and exposes it via `NERUPPU_AGE_MAVEN`); without Nix, run `age-encryption/build-aar.sh` once before the first Gradle build (see `age-encryption/BUILD.md`). Open: audio still has a few-second plaintext temp file from `MediaRecorder` (see `age-encryption/PATCHES.md` §8).
 
 ## 6. Key Files for Reference
 *   `MonitoringService.kt`: Orchestrates all sensors and handles the guarding lifecycle.
 *   `HandleSensorEventUseCase.kt`: Coordinates saving evidence and firing remote alerts.
 *   `SensorRepositoryImpl.kt`: Manages database operations and physical file deletion.
 *   `MatrixAlertTransport.kt`: Logic for formatting and transmitting alerts to Matrix.
+*   `AgeEncryptor.kt` / `AgeRecipientStore.kt` (`data/crypto`): age encryption of captures and storage of the recipient public key.
+*   `MediaStorageRepositoryImpl.kt`: The only writer to `captures/`; encrypts every capture.
 
 ## 7. UI Design Language
 *   **Primary Color**: `NeruppuOrange` (`#E8520A`).

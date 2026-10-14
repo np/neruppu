@@ -52,6 +52,7 @@ import org.havenapp.neruppu.domain.model.SensorType
 import org.havenapp.neruppu.domain.model.SensorEvent
 import org.havenapp.neruppu.domain.model.AlertTarget
 import org.havenapp.neruppu.domain.repository.AlertTargetRepository
+import org.havenapp.neruppu.domain.repository.EncryptionKeyRepository
 import org.havenapp.neruppu.domain.repository.MediaUploadRepository
 import org.havenapp.neruppu.domain.repository.SensorRepository
 import org.havenapp.neruppu.domain.usecase.HandleSensorEventUseCase
@@ -82,6 +83,9 @@ class MonitoringService : LifecycleService() {
 
     @Inject
     lateinit var cameraManager: CameraManager
+
+    @Inject
+    lateinit var encryptionKeyRepository: EncryptionKeyRepository
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var wakeLockRefreshJob: Job? = null
@@ -319,7 +323,20 @@ class MonitoringService : LifecycleService() {
         return START_STICKY
     }
 
-    fun toggleMonitoring() {
+    /**
+     * Returns false without starting when no age recipient is configured.
+     * Captures are encrypted at the source; with no key the only remaining
+     * choices are writing plaintext or silently dropping evidence, so we
+     * refuse loudly instead.
+     */
+    fun toggleMonitoring(): Boolean {
+        if (!_isMonitoring.value && !encryptionKeyRepository.isConfigured) {
+            Log.w("MonitoringService", "No age key configured - monitoring not started")
+            notificationManager.notify(ERROR_NOTIFICATION_ID, createErrorNotification(
+                "No age key configured — monitoring not started"
+            ))
+            return false
+        }
         val now = System.currentTimeMillis()
         _isMonitoring.value = !_isMonitoring.value
         if (_isMonitoring.value) {
@@ -344,6 +361,7 @@ class MonitoringService : LifecycleService() {
             updateNotification()
         }
         startMonitoringIfNeeded()
+        return true
     }
 
     private fun stopMonitoring() {
@@ -572,10 +590,7 @@ class MonitoringService : LifecycleService() {
         val imageBytes: ByteArray? = if (savePhotosPref) {
             try {
                 Log.d("MonitoringService", "Attempting to capture photo for event...")
-                val uri = cameraManager.capturePhoto()
-                withContext(Dispatchers.IO) {
-                    uri?.let { contentResolver.openInputStream(it)?.use { stream -> stream.readBytes() } }
-                }
+                cameraManager.capturePhotoBytes()
             } catch (e: Exception) {
                 Log.e("MonitoringService", "CRITICAL FAILURE: Photo capture threw exception", e)
                 null
@@ -681,6 +696,15 @@ class MonitoringService : LifecycleService() {
             .build()
     }
 
+    private fun createErrorNotification(message: String): Notification {
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("Neruppu Security")
+            .setContentText(message)
+            .setSmallIcon(R.drawable.ic_stat_security)
+            .setAutoCancel(true)
+            .build()
+    }
+
     override fun onDestroy() {
         Log.d("MonitoringService", "onDestroy [PID: ${Process.myPid()}]")
         super.onDestroy()
@@ -696,6 +720,7 @@ class MonitoringService : LifecycleService() {
 
     companion object {
         const val NOTIFICATION_ID = 1
+        const val ERROR_NOTIFICATION_ID = 2
         const val CHANNEL_ID = "monitoring_channel"
         const val ACTION_STOP_SERVICE = "org.havenapp.neruppu.STOP_SERVICE"
     }

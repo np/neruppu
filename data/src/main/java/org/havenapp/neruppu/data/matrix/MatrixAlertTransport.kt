@@ -23,6 +23,7 @@ import android.util.Log
 import org.havenapp.neruppu.data.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.havenapp.neruppu.data.storage.MediaStorageRepositoryImpl
 import org.havenapp.neruppu.domain.model.AlertPayload
 import org.havenapp.neruppu.domain.transport.AlertTransport
 import org.havenapp.neruppu.domain.util.AlertMessageFormatter
@@ -63,7 +64,14 @@ class MatrixAlertTransport @Inject constructor(
                 }
 
                  is AlertPayload.MediaAlert -> {
-                     val textMsg = AlertMessageFormatter.format(payload)
+                     val isBlob = payload.mediaFile.mimeType == MediaStorageRepositoryImpl.MIME_AGE
+                     // The homeserver's media repo is not E2E encrypted: for blobs,
+                     // keep both the text alert and the upload metadata opaque.
+                     val textMsg = if (isBlob) {
+                         AlertMessageFormatter.formatOpaque(payload)
+                     } else {
+                         AlertMessageFormatter.format(payload)
+                     }
                     if (BuildConfig.DEBUG) {
                         Log.d("MatrixAlertTransport", "Sending initial text alert...")
                     }
@@ -89,24 +97,31 @@ class MatrixAlertTransport @Inject constructor(
                         Log.d("MatrixAlertTransport", "Read ${bytes.size} bytes.")
                     }
 
-                    val uploadBytes = if (file.mimeType == "image/jpeg" && bytes.size > 800_000) {
+                    val uploadBytes = if (!isBlob && file.mimeType == "image/jpeg" && bytes.size > 800_000) {
                         if (BuildConfig.DEBUG) {
                             Log.d("MatrixAlertTransport", "Compressing image (${bytes.size} bytes)...")
                         }
                         compressJpeg(bytes, targetKb = 800)
                     } else bytes
 
-                    val fileName = file.absolutePath.substringAfterLast("/")
+                    val fileName = if (isBlob) {
+                        AlertMessageFormatter.opaqueFileName(payload)
+                    } else {
+                        file.absolutePath.substringAfterLast("/")
+                    }
+                    val uploadMimeType = if (isBlob) "application/octet-stream" else file.mimeType
                     if (BuildConfig.DEBUG) {
                         Log.d("MatrixAlertTransport", "Uploading media: $fileName (${uploadBytes.size} bytes)...")
                     }
-                    val mxcUri = apiClient.uploadMedia(uploadBytes, file.mimeType, fileName)
+                    val mxcUri = apiClient.uploadMedia(uploadBytes, uploadMimeType, fileName)
                         .getOrThrow()
 
                     if (BuildConfig.DEBUG) {
                         Log.d("MatrixAlertTransport", "Media uploaded. MXC URI: $mxcUri. Sending media event...")
                     }
-                    val mediaResult = if (file.mimeType.startsWith("image/")) {
+                    val mediaResult = if (isBlob) {
+                        apiClient.sendFileEvent(mxcUri, fileName)
+                    } else if (file.mimeType.startsWith("image/")) {
                         apiClient.sendImageEvent(mxcUri, textMsg, file.mimeType)
                     } else if (file.mimeType.startsWith("audio/")) {
                         apiClient.sendAudioEvent(mxcUri, textMsg, file.mimeType)

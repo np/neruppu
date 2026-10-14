@@ -112,6 +112,25 @@ class TelegramApiClient @Inject constructor(
         if (response.status.value !in 200..299) error("Telegram sendVoice failed: ${response.status}")
     }
 
+    /**
+     * The only Bot API method that passes bytes through untouched: sendPhoto
+     * re-encodes server-side (destroying ciphertext), sendVoice rejects it.
+     */
+    suspend fun sendDocument(bytes: ByteArray, caption: String, fileName: String): Result<Unit> = runCatching {
+        val response: HttpResponse = client.post("$baseUrl/sendDocument") {
+            val formData = formData {
+                append("chat_id", configStore.chatId)
+                append("caption", caption)
+                append("document", bytes, Headers.build {
+                    append(HttpHeaders.ContentType, "application/octet-stream")
+                    append(HttpHeaders.ContentDisposition, "filename=\"$fileName\"")
+                })
+            }
+            setBody(MultiPartFormDataContent(formData))
+        }
+        if (response.status.value !in 200..299) error("Telegram sendDocument failed: ${response.status}")
+    }
+
     suspend fun testConnection(): Result<Unit> = runCatching {
         val response: HttpResponse = client.get("$baseUrl/getMe")
         if (response.status.value !in 200..299) {

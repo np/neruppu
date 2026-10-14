@@ -39,6 +39,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockReset
 import androidx.compose.material.icons.filled.Message
 import androidx.compose.material.icons.filled.Mic
@@ -113,17 +114,20 @@ fun SettingsScreen(
     onSavePhotosToggle: (Boolean) -> Unit,
     telegramViewModel: TelegramSettingsViewModel = hiltViewModel(),
     matrixViewModel: MatrixSettingsViewModel = hiltViewModel(),
-    deletePasswordViewModel: DeletePasswordSettingsViewModel = hiltViewModel()
+    deletePasswordViewModel: DeletePasswordSettingsViewModel = hiltViewModel(),
+    encryptionViewModel: EncryptionSettingsViewModel = hiltViewModel()
 ) {
 
     val telegramUiState by telegramViewModel.uiState.collectAsState()
     val matrixUiState by matrixViewModel.uiState.collectAsState()
     val deletePasswordUiState by deletePasswordViewModel.uiState.collectAsState()
+    val encryptionUiState by encryptionViewModel.uiState.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
     var showTelegramConfig by remember { mutableStateOf(false) }
     var showMatrixConfig by remember { mutableStateOf(false) }
+    var showEncryptionConfig by remember { mutableStateOf(false) }
     var showSetupPasswordDialog by remember { mutableStateOf(false) }
     var showChangePasswordDialog by remember { mutableStateOf(false) }
     var showRemovePasswordDialog by remember { mutableStateOf(false) }
@@ -268,6 +272,16 @@ fun SettingsScreen(
                     )
                 }
 
+                SectionTitle("Encryption")
+                SettingsList {
+                    IntegrationSettingRow(
+                        icon = Icons.Default.Lock,
+                        label = "Age public key",
+                        isConfigured = encryptionUiState.isConfigured,
+                        onClick = { showEncryptionConfig = true }
+                    )
+                }
+
                 SectionTitle("Log deletion")
                 DeletePasswordManagementRow(
                     hasPassword = deletePasswordUiState.hasPassword,
@@ -394,6 +408,21 @@ fun SettingsScreen(
         }
     )
 
+    EncryptionKeyDialog(
+        isVisible = showEncryptionConfig,
+        uiState = encryptionUiState,
+        onValueChange = encryptionViewModel::onRecipientsChange,
+        onSave = { if (encryptionViewModel.save()) showEncryptionConfig = false },
+        onClear = {
+            encryptionViewModel.clear()
+            showEncryptionConfig = false
+        },
+        onDismiss = {
+            encryptionViewModel.reset()
+            showEncryptionConfig = false
+        }
+    )
+
     IntegrationConfigPopup(
         integrationType = IntegrationType.TELEGRAM,
         isVisible = showTelegramConfig,
@@ -412,6 +441,86 @@ fun SettingsScreen(
         actions = matrixViewModel,
         fields = matrixFields,
         descriptionText = "Provide Matrix credentials to receive real-time alerts on other devices."
+    )
+}
+
+@Composable
+fun EncryptionKeyDialog(
+    isVisible: Boolean,
+    uiState: EncryptionUiState,
+    onValueChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onClear: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    if (!isVisible) return
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Age public key",
+                style = MaterialTheme.typography.headlineSmall,
+                color = TextPrimary
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "Photos and audio are encrypted to this key at capture time. " +
+                        "Generate it on another device with age-keygen and paste the age1… public key. " +
+                        "One key per line. Monitoring cannot start without one.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary
+                )
+                OutlinedTextField(
+                    value = uiState.recipientsInput,
+                    onValueChange = onValueChange,
+                    label = { Text("Recipients", color = TextSecondary) },
+                    placeholder = { Text("age1…", color = TextSecondary) },
+                    isError = uiState.error != null,
+                    supportingText = if (uiState.error != null) {
+                        { Text(uiState.error.orEmpty(), color = NeruppuRed) }
+                    } else null,
+                    minLines = 2,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        cursorColor = NeruppuOrange,
+                        focusedBorderColor = NeruppuOrange,
+                        unfocusedBorderColor = BorderTertiary,
+                        unfocusedContainerColor = Color.White,
+                        focusedContainerColor = Color.White
+                    )
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onSave,
+                enabled = uiState.recipientsInput.isNotBlank(),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = NeruppuOrange)
+            ) {
+                Text("Save", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            Row {
+                if (uiState.isConfigured) {
+                    TextButton(onClick = onClear) {
+                        Text("Remove", color = NeruppuRed)
+                    }
+                }
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel", color = TextSecondary)
+                }
+            }
+        },
+        containerColor = Color.White,
+        shape = RoundedCornerShape(16.dp)
     )
 }
 

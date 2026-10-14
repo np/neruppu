@@ -19,6 +19,7 @@ package org.havenapp.neruppu.data.telegram
 
 import io.mockk.*
 import kotlinx.coroutines.runBlocking
+import org.havenapp.neruppu.data.storage.MediaStorageRepositoryImpl
 import org.havenapp.neruppu.domain.model.AlertPayload
 import org.havenapp.neruppu.domain.model.MediaFile
 import org.havenapp.neruppu.domain.model.SensorType
@@ -78,6 +79,33 @@ class TelegramAlertTransportTest {
 
         coVerify { apiClient.sendVoice(byteArrayOf(1, 2, 3), any()) }
         coVerify(exactly = 0) { apiClient.sendPhoto(any(), any()) }
+    }
+
+    @Test
+    fun `TC-TG-05 Encrypted blob is sent as document with opaque caption and name`() = runBlocking {
+        val file = tempFolder.newFile("neruppu_sound_1000.mp4.age")
+        file.writeBytes(byteArrayOf(4, 5, 6))
+
+        val payload = AlertPayload.MediaAlert(
+            SensorType.MICROPHONE,
+            "Noise burst",
+            MediaFile(file.absolutePath, MediaStorageRepositoryImpl.MIME_AGE, 3L, 1000L),
+            1000L
+        )
+
+        coEvery { apiClient.sendDocument(any(), any(), any()) } returns Result.success(Unit)
+
+        assertTrue(transport.send(payload).isSuccess)
+
+        coVerify {
+            apiClient.sendDocument(
+                byteArrayOf(4, 5, 6),
+                match { !it.contains("Noise") },
+                "1000.age"
+            )
+        }
+        coVerify(exactly = 0) { apiClient.sendPhoto(any(), any()) }
+        coVerify(exactly = 0) { apiClient.sendVoice(any(), any()) }
     }
 
     @Test

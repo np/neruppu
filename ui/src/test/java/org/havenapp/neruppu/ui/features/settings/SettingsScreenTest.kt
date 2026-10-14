@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import org.havenapp.neruppu.domain.model.AlertTarget
 import org.havenapp.neruppu.domain.repository.AlertTargetRepository
 import org.havenapp.neruppu.domain.repository.DeletePasswordRepository
+import org.havenapp.neruppu.domain.repository.EncryptionKeyRepository
 import org.havenapp.neruppu.domain.repository.MatrixConfigRepository
 import org.havenapp.neruppu.domain.repository.TelegramConfigRepository
 import org.havenapp.neruppu.domain.transport.AlertTransport
@@ -72,6 +73,9 @@ class SettingsScreenTest {
                     ),
                     deletePasswordViewModel = DeletePasswordSettingsViewModel(
                         deletePasswordRepository = FakeDeletePasswordRepository()
+                    ),
+                    encryptionViewModel = EncryptionSettingsViewModel(
+                        keyRepository = FakeEncryptionKeyRepository()
                     )
                 )
             }
@@ -113,6 +117,9 @@ class SettingsScreenTest {
                     ),
                     deletePasswordViewModel = DeletePasswordSettingsViewModel(
                         deletePasswordRepository = FakeDeletePasswordRepository()
+                    ),
+                    encryptionViewModel = EncryptionSettingsViewModel(
+                        keyRepository = FakeEncryptionKeyRepository()
                     )
                 )
             }
@@ -120,6 +127,16 @@ class SettingsScreenTest {
 
         composeTestRule.onNodeWithText("Motion detection").assertIsDisplayed()
     }
+}
+
+private class FakeEncryptionKeyRepository : EncryptionKeyRepository {
+    override var recipients: String = ""
+    override val isConfigured: Boolean get() = recipients.isNotBlank()
+    override fun setRecipients(keys: List<String>): Boolean {
+        recipients = keys.joinToString("\n")
+        return true
+    }
+    override fun clear() { recipients = "" }
 }
 
 private class FakeTelegramConfigRepository : TelegramConfigRepository {

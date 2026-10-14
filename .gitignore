@@ -38,3 +38,11 @@ Thumbs.db
 *.keystore
 keystore_base64.txt
 .local.properties
+
+# age-encryption: gomobile output (built by age-encryption/build-aar.sh)
+age-encryption/maven/
+age-encryption/.gobin/
+
+# Nix
+result
+result-*

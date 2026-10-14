@@ -23,6 +23,7 @@ import android.util.Log
 import org.havenapp.neruppu.data.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.havenapp.neruppu.data.storage.MediaStorageRepositoryImpl
 import org.havenapp.neruppu.domain.model.AlertPayload
 import org.havenapp.neruppu.domain.transport.AlertTransport
 import org.havenapp.neruppu.domain.util.AlertMessageFormatter
@@ -50,7 +51,13 @@ class TelegramAlertTransport @Inject constructor(
             if (BuildConfig.DEBUG) {
                 Log.d("TelegramAlertTransport", "Sending alert: $payload")
             }
-            val textMsg = AlertMessageFormatter.format(payload)
+            val isBlob = payload is AlertPayload.MediaAlert &&
+                payload.mediaFile.mimeType == MediaStorageRepositoryImpl.MIME_AGE
+            val textMsg = if (isBlob) {
+                AlertMessageFormatter.formatOpaque(payload)
+            } else {
+                AlertMessageFormatter.format(payload)
+            }
 
             when (payload) {
                 is AlertPayload.TextAlert -> {
@@ -61,13 +68,23 @@ class TelegramAlertTransport @Inject constructor(
                     val file = payload.mediaFile
                     val bytes: ByteArray = File(file.absolutePath).readBytes()
 
-                    if (file.mimeType == "image/jpeg") {
-                        val uploadBytes = if (bytes.size > 800_000) {
-                            compressJpeg(bytes, targetKb = 800)
-                        } else bytes
-                        apiClient.sendPhoto(uploadBytes, textMsg).getOrThrow()
-                    } else {
-                        apiClient.sendVoice(bytes, textMsg).getOrThrow()
+                    when (file.mimeType) {
+                        MediaStorageRepositoryImpl.MIME_AGE -> {
+                            // Never route a blob through compressJpeg(): decoding
+                            // ciphertext fails and would upload garbage or the original.
+                            apiClient.sendDocument(
+                                bytes,
+                                textMsg,
+                                AlertMessageFormatter.opaqueFileName(payload)
+                            ).getOrThrow()
+                        }
+                        "image/jpeg" -> {
+                            val uploadBytes = if (bytes.size > 800_000) {
+                                compressJpeg(bytes, targetKb = 800)
+                            } else bytes
+                            apiClient.sendPhoto(uploadBytes, textMsg).getOrThrow()
+                        }
+                        else -> apiClient.sendVoice(bytes, textMsg).getOrThrow()
                     }
                 }
             }

@@ -27,10 +27,12 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.havenapp.neruppu.data.camera.CameraManager
 import org.havenapp.neruppu.domain.model.SensorType
+import org.havenapp.neruppu.domain.repository.EncryptionKeyRepository
 import org.havenapp.neruppu.domain.repository.MediaUploadRepository
 import org.havenapp.neruppu.domain.repository.SensorRepository
 import org.havenapp.neruppu.domain.usecase.AttachAudioToEventUseCase
 import org.havenapp.neruppu.domain.usecase.HandleSensorEventUseCase
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -67,6 +69,7 @@ class MonitoringServiceTest {
     private val attachUseCase = mockk<AttachAudioToEventUseCase>(relaxed = true)
     private val mediaUploadRepository = mockk<MediaUploadRepository>(relaxed = true)
     private val cameraManager = mockk<CameraManager>(relaxed = true)
+    private val encryptionKeyRepository = mockk<EncryptionKeyRepository>(relaxed = true)
 
     private lateinit var service: MonitoringService
 
@@ -80,6 +83,7 @@ class MonitoringServiceTest {
         val mockFuture = mockk<com.google.common.util.concurrent.ListenableFuture<androidx.camera.lifecycle.ProcessCameraProvider>>(relaxed = true)
         every { androidx.camera.lifecycle.ProcessCameraProvider.getInstance(any()) } returns mockFuture
 
+        every { encryptionKeyRepository.isConfigured } returns true
         coEvery { handleUseCase.execute(any()) } returns Result.success(1L)
         coEvery { mediaUploadRepository.enqueueUpload(any()) } just Runs
 
@@ -89,7 +93,7 @@ class MonitoringServiceTest {
         controller.create()
         
         // Manual injection AFTER create() to overwrite Hilt's real objects
-        val fieldNames = listOf("cameraManager", "sensorRepository", "handleSensorEventUseCase", "attachAudioToEventUseCase", "mediaUploadRepository", "serviceScope", "savePhotosPref")
+        val fieldNames = listOf("cameraManager", "sensorRepository", "handleSensorEventUseCase", "attachAudioToEventUseCase", "mediaUploadRepository", "encryptionKeyRepository", "serviceScope", "savePhotosPref")
         fieldNames.forEach { name ->
             val field = MonitoringService::class.java.getDeclaredField(name)
             field.isAccessible = true
@@ -99,6 +103,7 @@ class MonitoringServiceTest {
                 "handleSensorEventUseCase" -> field.set(service, handleUseCase)
                 "attachAudioToEventUseCase" -> field.set(service, attachUseCase)
                 "mediaUploadRepository" -> field.set(service, mediaUploadRepository)
+                "encryptionKeyRepository" -> field.set(service, encryptionKeyRepository)
                 "serviceScope" -> field.set(service, CoroutineScope(testDispatcher + SupervisorJob()))
                 "savePhotosPref" -> field.set(service, false)
             }
@@ -135,6 +140,15 @@ class MonitoringServiceTest {
         
         service.toggleMonitoring()
         assertFalse(service.isMonitoring.value)
+    }
+
+    @Test
+    fun `TC-SVC-03 Monitoring refuses to start without an age key`() {
+        every { encryptionKeyRepository.isConfigured } returns false
+
+        assertEquals(false, service.toggleMonitoring())
+        assertFalse(service.isMonitoring.value)
+        verify(exactly = 0) { cameraManager.bindCamera(any(), any(), any(), any()) }
     }
 
     @Test

@@ -223,6 +223,26 @@ class MatrixApiClient @Inject constructor(
         if (BuildConfig.DEBUG) Log.e("MatrixApiClient", "Exception during sendAudioEvent", it)
     }
 
+    /** m.file event for opaque blobs; by convention its body is the filename. */
+    suspend fun sendFileEvent(
+        mxcUri: String,
+        fileName: String,
+        mimeType: String = "application/octet-stream",
+        txnId: String = UUID.randomUUID().toString()
+    ): Result<Unit> = runCatching {
+        val resolvedRoomId = resolveRoomId(configStore.roomId).getOrThrow()
+
+        val sendResult = performSendMedia(resolvedRoomId, "m.file", mxcUri, fileName, mimeType, txnId)
+
+        if (sendResult.isFailure) {
+            if (BuildConfig.DEBUG) Log.w("MatrixApiClient", "Initial file send failed, attempting to join and retry...")
+            joinRoom(resolvedRoomId).onSuccess {
+                return performSendMedia(resolvedRoomId, "m.file", mxcUri, fileName, mimeType, txnId)
+            }
+        }
+        sendResult.getOrThrow()
+    }
+
     private suspend fun performSendMedia(
         roomId: String,
         msgType: String,

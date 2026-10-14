@@ -349,7 +349,15 @@ fun EventItem(event: Event) {
             val mediaExists = event.mediaUri?.let { File(Uri.parse(it).path ?: "").exists() } ?: false
             val audioExists = event.audioUri?.let { File(Uri.parse(it).path ?: "").exists() } ?: false
 
-            if (mediaExists && event.mediaUri != null) {
+            // Captures are age-encrypted to a key the device does not hold:
+            // they cannot be previewed here, by design.
+            val mediaEncrypted = event.mediaUri?.endsWith(".age") == true
+            val audioEncrypted = event.audioUri?.endsWith(".age") == true
+
+            if (mediaExists && mediaEncrypted) {
+                EncryptedMediaPlaceholder("Photo encrypted — decrypt with your age key")
+                Spacer(modifier = Modifier.height(12.dp))
+            } else if (mediaExists && event.mediaUri != null) {
                 Image(
                     painter = rememberAsyncImagePainter(event.mediaUri),
                     contentDescription = "Event Photo",
@@ -366,7 +374,10 @@ fun EventItem(event: Event) {
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
-            if (audioExists && event.audioUri != null) {
+            if (audioExists && audioEncrypted) {
+                EncryptedMediaPlaceholder("Audio encrypted — decrypt with your age key")
+                Spacer(modifier = Modifier.height(12.dp))
+            } else if (audioExists && event.audioUri != null) {
                 AudioPlayer(uriString = event.audioUri!!)
                 Spacer(modifier = Modifier.height(12.dp))
             } else if (event.audioUri != null && event.uploadStatus == UploadStatus.UPLOADED && !audioExists) {
@@ -725,7 +736,13 @@ fun DeleteConfirmationDialogPreview() {
 }
 
 @Composable
-fun DeletedMediaPlaceholder(text: String) {
+fun EncryptedMediaPlaceholder(text: String) = MediaPlaceholder(text, Icons.Default.Lock)
+
+@Composable
+fun DeletedMediaPlaceholder(text: String) = MediaPlaceholder(text, Icons.Default.CloudDone)
+
+@Composable
+private fun MediaPlaceholder(text: String, icon: ImageVector) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -734,7 +751,7 @@ fun DeletedMediaPlaceholder(text: String) {
             .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
         Icon(
-            imageVector = Icons.Default.CloudDone,
+            imageVector = icon,
             contentDescription = null,
             tint = TextSecondary,
             modifier = Modifier.size(16.dp)

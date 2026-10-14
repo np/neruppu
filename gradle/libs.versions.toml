@@ -20,9 +20,11 @@ mockk = "1.13.10"
 leakCanary = "2.14"
 ktor = "2.3.7"
 securityCrypto = "1.1.0-alpha06"
+neruppuAge = "1.0.0"
 serialization = "1.6.3"
 
 [libraries]
+neruppu-age = { group = "org.havenapp.neruppu", name = "neruppu-age", version.ref = "neruppuAge" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "splashScreen" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
