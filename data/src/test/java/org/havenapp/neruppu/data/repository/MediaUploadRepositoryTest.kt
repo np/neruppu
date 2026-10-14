@@ -27,7 +27,12 @@ import org.havenapp.neruppu.domain.model.UploadStatus
 import org.havenapp.neruppu.domain.repository.AlertTargetRepository
 import org.havenapp.neruppu.domain.repository.MediaUploadRepository
 import org.havenapp.neruppu.domain.repository.SensorRepository
+import org.havenapp.neruppu.data.local.AlertGroupingStore
+import org.havenapp.neruppu.data.worker.UploadRunScheduler
 import org.havenapp.neruppu.domain.transport.AlertTransport
+import org.havenapp.neruppu.domain.util.AlertGroupingConfig
+import org.havenapp.neruppu.domain.util.AlertGroupingState
+import java.time.Instant
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -47,6 +52,8 @@ class MediaUploadRepositoryTest {
     private lateinit var matrixTransport: AlertTransport
     private lateinit var httpsTransport: AlertTransport
     private lateinit var mediaUploadRepository: MediaUploadRepository
+    private lateinit var groupingStore: FakeGroupingStore
+    private val scheduledDelays = mutableListOf<Long>()
 
     private lateinit var testFile: File
 
@@ -66,7 +73,9 @@ class MediaUploadRepositoryTest {
             alertTargetRepository = alertTargetRepository,
             telegramTransport = telegramTransport,
             matrixTransport = matrixTransport,
-            httpsTransport = httpsTransport
+            httpsTransport = httpsTransport,
+            groupingStore = FakeGroupingStore().also { groupingStore = it },
+            runScheduler = UploadRunScheduler { scheduledDelays += it }
         )
         testFile = tempFolder.newFile("test.jpg")
         testFile.writeBytes(byteArrayOf(1, 2, 3))
@@ -226,6 +235,88 @@ class MediaUploadRepositoryTest {
     }
 
     @Test
+    fun `TC-MUP-09 A burst sends the first event and groups the rest, keeping their captures`() = runBlocking {
+        val t0 = 1_760_000_000_000L
+        val files = (0..2).map { i -> tempFolder.newFile("c$i.jpg.age").apply { writeBytes(byteArrayOf(i.toByte())) } }
+        val events = files.mapIndexed { i, f ->
+            Event(
+                id = i + 1L,
+                timestamp = Instant.ofEpochMilli(t0 + i * 3_000L),
+                sensorType = SensorType.CAMERA_MOTION,
+                description = "Motion $i",
+                mediaUri = f.absolutePath,
+                uploadStatus = UploadStatus.PENDING
+            )
+        }
+        (mediaUploadRepository as MediaUploadRepositoryImpl).clock = { t0 + 10_000 }
+        every { alertTargetRepository.activeTarget } returns AlertTarget.TELEGRAM
+        coEvery { sensorRepository.getPendingUploadEvents(any()) } returns events
+        coEvery { telegramTransport.send(any()) } returns Result.success(Unit)
+        coEvery { sensorRepository.updateEventUploadStatus(any(), any(), any(), any(), any()) } just Runs
+
+        assertTrue(mediaUploadRepository.uploadPendingEvents())
+
+        coVerify(exactly = 1) { telegramTransport.send(any()) }
+        assertFalse(files[0].exists())
+        assertTrue(files[1].exists() && files[2].exists())
+        coVerify { sensorRepository.updateEventUploadStatus(2L, UploadStatus.GROUPED, "TELEGRAM", null, null) }
+        coVerify { sensorRepository.updateEventUploadStatus(3L, UploadStatus.GROUPED, "TELEGRAM", null, null) }
+        assertEquals(2, groupingStore.state.groupedCount)
+        // Summary run scheduled for the end of the 2-minute window opened by the first event.
+        assertEquals(listOf(2 * 60_000L - 10_000), scheduledDelays)
+    }
+
+    @Test
+    fun `TC-MUP-10 Due summary sends a count and one capture`() = runBlocking {
+        val t0 = 1_760_000_000_000L
+        val capture = tempFolder.newFile("c1.jpg.age").apply { writeBytes(byteArrayOf(9)) }
+        groupingStore.state = AlertGroupingState(
+            incidentLastEventAt = t0 + 6_000,
+            windowStart = t0,
+            groupedCount = 2,
+            firstGroupedAt = t0 + 3_000,
+            captureEventId = 2L,
+            capturePath = capture.absolutePath,
+            sentAt = listOf(t0)
+        )
+        (mediaUploadRepository as MediaUploadRepositoryImpl).clock = { t0 + 2 * 60_000L }
+        every { alertTargetRepository.activeTarget } returns AlertTarget.TELEGRAM
+        coEvery { sensorRepository.getPendingUploadEvents(any()) } returns emptyList()
+        val sent = mutableListOf<AlertPayload>()
+        coEvery { telegramTransport.send(capture(sent)) } returns Result.success(Unit)
+        coEvery { sensorRepository.updateEventUploadStatus(any(), any(), any(), any(), any()) } just Runs
+
+        assertTrue(mediaUploadRepository.uploadPendingEvents())
+
+        assertEquals(2, sent.size)
+        val summary = sent[0] as AlertPayload.TextAlert
+        assertTrue(summary.message.startsWith("+2 more events since"))
+        assertEquals(capture.absolutePath, (sent[1] as AlertPayload.MediaAlert).mediaFile.absolutePath)
+        assertFalse(capture.exists())
+        coVerify { sensorRepository.updateEventUploadStatus(2L, UploadStatus.UPLOADED, "TELEGRAM", any(), null) }
+        assertEquals(0, groupingStore.state.groupedCount)
+        assertEquals(2, groupingStore.state.sentAt.size)
+    }
+
+    @Test
+    fun `TC-MUP-11 A failed send stops the run so the order is kept for the retry`() = runBlocking {
+        val events = (1L..2L).map { id ->
+            Event(id = id, sensorType = SensorType.LIGHT, description = "Light $id", uploadStatus = UploadStatus.PENDING)
+        }
+        every { alertTargetRepository.activeTarget } returns AlertTarget.TELEGRAM
+        coEvery { sensorRepository.getPendingUploadEvents(any()) } returns events
+        coEvery { telegramTransport.send(any()) } returns Result.failure(Exception("offline"))
+        coEvery { sensorRepository.updateEventUploadStatus(any(), any(), any(), any(), any()) } just Runs
+
+        assertFalse(mediaUploadRepository.uploadPendingEvents())
+
+        coVerify(exactly = 1) { telegramTransport.send(any()) }
+        // Nothing recorded: the next run starts the incident again with event 1.
+        assertEquals(AlertGroupingState(), groupingStore.state)
+        coVerify(exactly = 0) { sensorRepository.updateEventUploadStatus(2L, any(), any(), any(), any()) }
+    }
+
+    @Test
     fun `TC-MUP-05 Text event without media is sent and marked uploaded`() = runBlocking {
         val event = Event(
             id = 1L,
@@ -288,4 +379,10 @@ class MediaUploadRepositoryTest {
         assertFalse(imageFile.exists())
         assertFalse(audioFile.exists())
     }
+}
+
+private class FakeGroupingStore : AlertGroupingStore {
+    override var state = AlertGroupingState()
+    override val config = AlertGroupingConfig(windowMs = 2 * 60_000L, quietMs = 5 * 60_000L, hourlyCap = 30)
+    override var scheduledFlushAt = 0L
 }

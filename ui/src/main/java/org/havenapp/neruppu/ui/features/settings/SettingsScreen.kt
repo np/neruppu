@@ -123,6 +123,10 @@ fun SettingsScreen(
     onSavePhotosToggle: (Boolean) -> Unit,
     armingDelaySeconds: Int = 60,
     onArmingDelayChange: (Int) -> Unit = {},
+    alertGroupWindowSeconds: Int = 120,
+    onAlertGroupWindowChange: (Int) -> Unit = {},
+    alertHourlyCap: Int = 30,
+    onAlertHourlyCapChange: (Int) -> Unit = {},
     telegramViewModel: TelegramSettingsViewModel = hiltViewModel(),
     matrixViewModel: MatrixSettingsViewModel = hiltViewModel(),
     httpsViewModel: HttpsSettingsViewModel = hiltViewModel(),
@@ -313,6 +317,37 @@ fun SettingsScreen(
                     Text(
                         "After Start, events are ignored for this long so you can leave the room. " +
                             "A notification tells you when guarding is active.",
+                        color = TextSecondary,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                SectionTitle("Remote alerts")
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(BackgroundSecondary, RoundedCornerShape(12.dp))
+                        .border(0.5.dp, BorderTertiary, RoundedCornerShape(12.dp))
+                        .padding(12.dp)
+                ) {
+                    SteppedSlider(
+                        "Group follow-up events",
+                        GROUP_WINDOW_STEPS,
+                        alertGroupWindowSeconds,
+                        { if (it == 0) "Off" else "every ${formatArmingDelay(it)}" },
+                        onAlertGroupWindowChange
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    SteppedSlider(
+                        "At most",
+                        HOURLY_CAP_STEPS,
+                        alertHourlyCap,
+                        { if (it == 0) "Unlimited" else "$it alerts / hour" },
+                        onAlertHourlyCapChange
+                    )
+                    Text(
+                        "The first event of an incident is sent at once; later ones are summed up " +
+                            "in one message per period, with one capture. Other captures stay on the device.",
                         color = TextSecondary,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -914,17 +949,27 @@ fun formatArmingDelay(seconds: Int): String = when {
 }
 
 @Composable
-fun ArmingDelaySlider(seconds: Int, onChange: (Int) -> Unit) {
-    // Snap to the nearest step so a value stored by an older build still maps.
-    val index = ARMING_DELAY_STEPS.indices.minByOrNull { kotlin.math.abs(ARMING_DELAY_STEPS[it] - seconds) } ?: 3
+fun ArmingDelaySlider(seconds: Int, onChange: (Int) -> Unit) =
+    SteppedSlider("Wait before guarding", ARMING_DELAY_STEPS, seconds, ::formatArmingDelay, onChange)
+
+/** Slider over a fixed list of values; a stored value between steps snaps to the nearest. */
+@Composable
+fun SteppedSlider(
+    label: String,
+    steps: List<Int>,
+    value: Int,
+    format: (Int) -> String,
+    onChange: (Int) -> Unit
+) {
+    val index = steps.indices.minByOrNull { kotlin.math.abs(steps[it] - value) } ?: 0
     Column {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("Wait before guarding", color = TextSecondary, style = MaterialTheme.typography.labelMedium)
+            Text(label, color = TextSecondary, style = MaterialTheme.typography.labelMedium)
             Text(
-                formatArmingDelay(ARMING_DELAY_STEPS[index]),
+                format(steps[index]),
                 color = NeruppuOrange,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Medium
@@ -932,9 +977,9 @@ fun ArmingDelaySlider(seconds: Int, onChange: (Int) -> Unit) {
         }
         androidx.compose.material3.Slider(
             value = index.toFloat(),
-            onValueChange = { onChange(ARMING_DELAY_STEPS[it.roundToInt().coerceIn(ARMING_DELAY_STEPS.indices)]) },
-            valueRange = 0f..(ARMING_DELAY_STEPS.size - 1).toFloat(),
-            steps = ARMING_DELAY_STEPS.size - 2,
+            onValueChange = { onChange(steps[it.roundToInt().coerceIn(steps.indices)]) },
+            valueRange = 0f..(steps.size - 1).toFloat(),
+            steps = steps.size - 2,
             colors = androidx.compose.material3.SliderDefaults.colors(
                 thumbColor = Color.White,
                 activeTrackColor = NeruppuOrange,
@@ -943,6 +988,9 @@ fun ArmingDelaySlider(seconds: Int, onChange: (Int) -> Unit) {
         )
     }
 }
+
+private val GROUP_WINDOW_STEPS = listOf(0, 60, 120, 300, 600)
+private val HOURLY_CAP_STEPS = listOf(10, 20, 30, 60, 0)
 
 @Composable
 fun SliderWrap(

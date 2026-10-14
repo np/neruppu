@@ -83,6 +83,7 @@ class SensorRepositoryImpl(
                     UploadStatus.PENDING -> 1
                     UploadStatus.UPLOADED -> 2
                     UploadStatus.FAILED -> 3
+                    UploadStatus.GROUPED -> 4
                 },
                 uploadTarget = target,
                 uploadedAt = uploadedAt,

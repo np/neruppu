@@ -85,11 +85,34 @@ class MediaUploadWorker(
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.MINUTES)
                 .build()
 
+            // APPEND_OR_REPLACE, not KEEP: an event arriving while a run is in
+            // progress must get a run of its own, or it waits for the next event.
             WorkManager.getInstance(context).enqueueUniqueWork(
                 UNIQUE_WORK_NAME,
-                ExistingWorkPolicy.KEEP,
+                ExistingWorkPolicy.APPEND_OR_REPLACE,
                 request
             )
         }
+
+        /**
+         * Runs the upload again after [delayMs], to send a pending incident
+         * summary even if no new event arrives. Not unique: the repository
+         * serialises runs and an extra run is harmless.
+         */
+        fun scheduleRun(context: Context, delayMs: Long) {
+            val request = OneTimeWorkRequestBuilder<MediaUploadWorker>()
+                .setInitialDelay(delayMs.coerceAtLeast(0), TimeUnit.MILLISECONDS)
+                .setConstraints(
+                    Constraints.Builder()
+                        .setRequiredNetworkType(NetworkType.CONNECTED)
+                        .build()
+                )
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.MINUTES)
+                .addTag(FLUSH_TAG)
+                .build()
+            WorkManager.getInstance(context).enqueue(request)
+        }
+
+        private const val FLUSH_TAG = "media_upload_flush"
     }
 }

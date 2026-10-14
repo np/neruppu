@@ -22,7 +22,9 @@ import java.time.Instant
 enum class UploadStatus {
     PENDING,
     UPLOADED,
-    FAILED
+    FAILED,
+    /** Folded into an incident summary instead of sent; capture kept on device. */
+    GROUPED
 }
 
 data class Event(

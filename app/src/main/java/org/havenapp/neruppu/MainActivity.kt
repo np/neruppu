@@ -50,6 +50,7 @@ import org.havenapp.neruppu.core.ui.theme.NeruppuOrange
 import org.havenapp.neruppu.core.ui.theme.NeruppuTheme
 import org.havenapp.neruppu.core.ui.theme.TextPrimary
 import org.havenapp.neruppu.core.ui.theme.TextSecondary
+import org.havenapp.neruppu.data.local.SharedPrefsAlertGroupingStore
 import org.havenapp.neruppu.service.MonitoringService
 import org.havenapp.neruppu.ui.features.dashboard.DashboardScreen
 import org.havenapp.neruppu.ui.features.logs.LogsScreen
@@ -200,6 +201,18 @@ class MainActivity : ComponentActivity() {
         var pushAlerts by remember { mutableStateOf(prefs.getBoolean("push_alerts", true)) }
         var savePhotos by remember { mutableStateOf(prefs.getBoolean("save_photos", true)) }
         var useFrontCamera by remember { mutableStateOf(prefs.getBoolean("use_front_camera", false)) }
+        var alertGroupWindowSeconds by remember {
+            mutableIntStateOf(prefs.getInt(
+                SharedPrefsAlertGroupingStore.PREF_WINDOW_SECONDS,
+                SharedPrefsAlertGroupingStore.DEFAULT_WINDOW_SECONDS
+            ))
+        }
+        var alertHourlyCap by remember {
+            mutableIntStateOf(prefs.getInt(
+                SharedPrefsAlertGroupingStore.PREF_HOURLY_CAP,
+                SharedPrefsAlertGroupingStore.DEFAULT_HOURLY_CAP
+            ))
+        }
         var armingDelaySeconds by remember {
             mutableIntStateOf(prefs.getInt(
                 MonitoringService.PREF_ARMING_DELAY_SECONDS,
@@ -360,6 +373,16 @@ class MainActivity : ComponentActivity() {
                             onArmingDelayChange = {
                                 armingDelaySeconds = it
                                 prefs.edit().putInt(MonitoringService.PREF_ARMING_DELAY_SECONDS, it).apply()
+                            },
+                            alertGroupWindowSeconds = alertGroupWindowSeconds,
+                            onAlertGroupWindowChange = {
+                                alertGroupWindowSeconds = it
+                                prefs.edit().putInt(SharedPrefsAlertGroupingStore.PREF_WINDOW_SECONDS, it).apply()
+                            },
+                            alertHourlyCap = alertHourlyCap,
+                            onAlertHourlyCapChange = {
+                                alertHourlyCap = it
+                                prefs.edit().putInt(SharedPrefsAlertGroupingStore.PREF_HOURLY_CAP, it).apply()
                             },
                             encryptionViewModel = encryptionViewModel
                         )

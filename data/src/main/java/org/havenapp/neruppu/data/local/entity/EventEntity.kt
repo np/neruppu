@@ -41,6 +41,7 @@ data class EventEntity(
         1 -> UploadStatus.PENDING
         2 -> UploadStatus.UPLOADED
         3 -> UploadStatus.FAILED
+        4 -> UploadStatus.GROUPED
         else -> UploadStatus.PENDING
     }
 }
@@ -69,6 +70,7 @@ fun Event.toEntity(): EventEntity = EventEntity(
         UploadStatus.PENDING -> 1
         UploadStatus.UPLOADED -> 2
         UploadStatus.FAILED -> 3
+        UploadStatus.GROUPED -> 4
     },
     uploadTarget = uploadTarget,
     uploadedAt = uploadedAt,

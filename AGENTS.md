@@ -29,6 +29,8 @@ Remote alerts are sent via the **Matrix Protocol** using a lightweight Ktor-base
 
 *   **Other channels**: Telegram (`TelegramAlertTransport`) and a generic **HTTPS webhook** (`HttpsAlertTransport`: one POST per alert built from a user-defined template — URL, multipart/form/JSON body, templated headers and fields, optional capture part; presets for Pushover, ntfy and `tools/neruppu-receiver`; see `docs/https-transport.md`). A transport whose `deliversMedia` is false leaves the local capture in place after sending. Exactly one channel is active (`AlertTarget`); saving one clears the others.
 
+*   **Alert grouping & hourly cap**: `MediaUploadRepositoryImpl` runs pending events through `AlertGrouping` (pure, `domain/util`). The first event of an incident is sent at once; later ones become `UploadStatus.GROUPED` (capture kept on device) and one summary ("+N more events since HH:mm:ss", no sensor types) plus the first grouped capture goes out per window (Settings → Remote alerts, `alert_group_window_seconds`, default 120 s, 0 = off). An incident ends after 5 min without events. At most `alert_hourly_cap` alerts per rolling hour (default 30, 0 = unlimited); excess is grouped. State persists in `neruppu_alert_grouping` prefs; a delayed `MediaUploadWorker.scheduleRun` sends a due summary without waiting for a new event. A transient send failure stops the run so order is kept on retry.
+
 ## 5. Security & Privacy Features
 *   **Offline-First**: All logs and media are stored locally in the `Downloads/Neruppu` folder (via MediaStore) and an internal Room database.
 *   **Media Cleanup**: When clearing logs, users can optionally trigger a physical file deletion for all associated media.

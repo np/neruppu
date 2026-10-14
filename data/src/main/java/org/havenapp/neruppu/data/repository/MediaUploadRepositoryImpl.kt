@@ -22,7 +22,11 @@ import org.havenapp.neruppu.data.BuildConfig
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import org.havenapp.neruppu.data.local.AlertGroupingStore
 import org.havenapp.neruppu.data.storage.MediaStorageRepositoryImpl
+import org.havenapp.neruppu.data.worker.UploadRunScheduler
 import org.havenapp.neruppu.data.worker.MediaUploadWorker
 import org.havenapp.neruppu.domain.di.HttpsTransport
 import org.havenapp.neruppu.domain.di.MatrixTransport
@@ -31,23 +35,32 @@ import org.havenapp.neruppu.domain.model.AlertPayload
 import org.havenapp.neruppu.domain.model.AlertTarget
 import org.havenapp.neruppu.domain.model.Event
 import org.havenapp.neruppu.domain.model.MediaFile
+import org.havenapp.neruppu.domain.model.SensorType
 import org.havenapp.neruppu.domain.model.UploadStatus
 import org.havenapp.neruppu.domain.repository.AlertTargetRepository
 import org.havenapp.neruppu.domain.repository.MediaUploadRepository
 import org.havenapp.neruppu.domain.repository.SensorRepository
 import org.havenapp.neruppu.domain.transport.AlertTransport
+import org.havenapp.neruppu.domain.util.AlertGrouping
+import org.havenapp.neruppu.domain.util.AlertGroupingConfig
+import org.havenapp.neruppu.domain.util.AlertGroupingState
 import java.io.File
-import javax.inject.Inject
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import javax.inject.Singleton
 
 @Singleton
-class MediaUploadRepositoryImpl @Inject constructor(
+// Built by AppModule (needs the UploadRunScheduler lambda), hence no @Inject.
+class MediaUploadRepositoryImpl(
     @ApplicationContext private val context: android.content.Context,
     private val sensorRepository: SensorRepository,
     private val alertTargetRepository: AlertTargetRepository,
     @TelegramTransport private val telegramTransport: AlertTransport,
     @MatrixTransport private val matrixTransport: AlertTransport,
-    @HttpsTransport private val httpsTransport: AlertTransport
+    @HttpsTransport private val httpsTransport: AlertTransport,
+    private val groupingStore: AlertGroupingStore,
+    private val runScheduler: UploadRunScheduler
 ) : MediaUploadRepository {
 
     override suspend fun enqueueUpload(eventId: Long) {
@@ -61,142 +74,200 @@ class MediaUploadRepositoryImpl @Inject constructor(
         sensorRepository.getPendingUploadEvents(limit)
     }
 
+    private val mutex = Mutex()
+
+    /** Wall clock; replaced in tests. */
+    internal var clock: () -> Long = System::currentTimeMillis
+
+    /**
+     * Sends pending events through [AlertGrouping]: the first event of an
+     * incident immediately, later ones folded into one summary per window,
+     * all under an hourly cap. Grouped captures stay on the device.
+     * Runs are serialised: the worker, retries and delayed summary runs may overlap.
+     */
     override suspend fun uploadPendingEvents(): Boolean = withContext(Dispatchers.IO) {
+        mutex.withLock { uploadLocked() }
+    }
+
+    private suspend fun uploadLocked(): Boolean {
         val target = alertTargetRepository.activeTarget
-        if (target == AlertTarget.NONE) {
-            return@withContext true
+        val transport = when (target) {
+            AlertTarget.TELEGRAM -> telegramTransport
+            AlertTarget.MATRIX -> matrixTransport
+            AlertTarget.HTTPS -> httpsTransport
+            AlertTarget.NONE -> return true
+        }
+        val config = groupingStore.config
+        val now = clock()
+        var state = groupingStore.state
+
+        // A summary that became due goes out before newer events, to keep order.
+        var (afterFlush, ok) = flushIfDue(state, config, now, transport, target)
+        state = afterFlush
+
+        if (ok) {
+            for (event in sensorRepository.getPendingUploadEvents(limit = 50)) {
+                val capturePath = event.mediaUri ?: event.audioUri
+                val (decision, next) = AlertGrouping.onEvent(
+                    state, config, event.timestamp.toEpochMilli(), now, event.id, capturePath
+                )
+                when (decision) {
+                    AlertGrouping.Decision.SEND -> when (sendEvent(event, transport, target)) {
+                        SendOutcome.SENT -> state = AlertGrouping.recordSend(next, now)
+                        // Missing file: marked FAILED, nothing to retry, move on.
+                        SendOutcome.PERMANENT_FAILURE -> Unit
+                        // Network or endpoint: stop here so order is kept on retry.
+                        SendOutcome.TRANSIENT_FAILURE -> { ok = false; break }
+                    }
+                    AlertGrouping.Decision.GROUP -> {
+                        state = next
+                        sensorRepository.updateEventUploadStatus(
+                            eventId = event.id,
+                            status = UploadStatus.GROUPED,
+                            target = target.name,
+                            uploadedAt = null,
+                            failureReason = null
+                        )
+                    }
+                }
+            }
         }
 
-        val events = sensorRepository.getPendingUploadEvents(limit = 50)
-        var hasFailure = false
+        if (ok) {
+            val (flushed, flushOk) = flushIfDue(state, config, now, transport, target)
+            state = flushed
+            ok = flushOk
+        }
 
-        events.forEach { event ->
-            val transport = when (target) {
-                AlertTarget.TELEGRAM -> telegramTransport
-                AlertTarget.MATRIX -> matrixTransport
-                AlertTarget.HTTPS -> httpsTransport
-                AlertTarget.NONE -> null
+        groupingStore.state = state
+        AlertGrouping.nextFlushAt(state, config, now)?.let { at ->
+            if (at != groupingStore.scheduledFlushAt) {
+                runScheduler.scheduleRun(at - now)
+                groupingStore.scheduledFlushAt = at
             }
+        }
+        return ok
+    }
 
-            if (transport == null) {
-                return@forEach
+    private enum class SendOutcome { SENT, TRANSIENT_FAILURE, PERMANENT_FAILURE }
+
+    /** Sends the summary of grouped events if due; returns the new state and success. */
+    private suspend fun flushIfDue(
+        state: AlertGroupingState,
+        config: AlertGroupingConfig,
+        now: Long,
+        transport: AlertTransport,
+        target: AlertTarget
+    ): Pair<AlertGroupingState, Boolean> {
+        val plan = AlertGrouping.flushPlan(state, config, now) ?: return state to true
+
+        val since = SUMMARY_TIME_FORMAT.format(Instant.ofEpochMilli(plan.since))
+        val summary = AlertPayload.TextAlert(
+            // Not shown by any transport for text alerts; the summary is deliberately
+            // generic: a count, no sensor types.
+            sensorType = SensorType.POWER,
+            message = "+${plan.count} more event${if (plan.count > 1) "s" else ""} since $since",
+            timestamp = now
+        )
+        if (transport.send(summary).isFailure) return state to false
+
+        // One capture per window, the first grouped one; the others stay on the device.
+        val path = plan.capturePath
+        if (path != null && File(path).exists()) {
+            val file = File(path)
+            val capture = AlertPayload.MediaAlert(
+                sensorType = SensorType.POWER,
+                message = "Capture",
+                mediaFile = MediaFile(path, guessMimeType(path), file.length(), now),
+                timestamp = now
+            )
+            if (transport.send(capture).isSuccess) {
+                if (transport.deliversMedia) deleteMediaFile(path)
+                sensorRepository.updateEventUploadStatus(
+                    eventId = plan.captureEventId,
+                    status = UploadStatus.UPLOADED,
+                    target = target.name,
+                    uploadedAt = now,
+                    failureReason = null
+                )
+            } else if (BuildConfig.DEBUG) {
+                Log.w("MediaUploadRepository", "Summary capture not sent; kept on device")
             }
+        }
+        return AlertGrouping.afterFlush(state, now) to true
+    }
 
-            var uploadSucceeded = true
-
-            // Upload image first (if present)
-            if (event.mediaUri != null) {
-                val mediaUri = event.mediaUri!!
-                val file = File(mediaUri)
-                if (!file.exists()) {
-                    sensorRepository.updateEventUploadStatus(
-                        eventId = event.id,
-                        status = UploadStatus.FAILED,
-                        target = target.name,
-                        uploadedAt = null,
-                        failureReason = "Media file not found: $mediaUri"
-                    )
-                    hasFailure = true
-                    uploadSucceeded = false
-                } else {
-                    val payload = AlertPayload.MediaAlert(
-                        sensorType = event.sensorType,
-                        message = event.description,
-                        mediaFile = MediaFile(
-                            absolutePath = mediaUri,
-                            mimeType = guessMimeType(mediaUri),
-                            sizeBytes = file.length(),
-                            timestamp = event.timestamp.toEpochMilli()
-                        ),
-                        timestamp = event.timestamp.toEpochMilli()
-                    )
-
-                    val result = transport.send(payload)
-                    if (result.isFailure) {
-                        hasFailure = true
-                        uploadSucceeded = false
-                        val error = result.exceptionOrNull()?.message ?: "Unknown error"
-                        sensorRepository.updateEventUploadStatus(
-                            eventId = event.id,
-                            status = UploadStatus.FAILED,
-                            target = target.name,
-                            uploadedAt = null,
-                            failureReason = "Image upload failed: $error"
-                        )
-                    } else if (transport.deliversMedia) {
-                        deleteMediaFile(mediaUri)
-                    }
-                }
+    /** Sends one event (image, then audio, or text if it has neither). */
+    private suspend fun sendEvent(event: Event, transport: AlertTransport, target: AlertTarget): SendOutcome {
+        val media = listOfNotNull(
+            event.mediaUri?.let { it to "Image" },
+            event.audioUri?.let { it to "Audio" }
+        )
+        for ((path, label) in media) {
+            val file = File(path)
+            if (!file.exists()) {
+                sensorRepository.updateEventUploadStatus(
+                    eventId = event.id,
+                    status = UploadStatus.FAILED,
+                    target = target.name,
+                    uploadedAt = null,
+                    failureReason = "$label file not found: $path"
+                )
+                return SendOutcome.PERMANENT_FAILURE
             }
-
-            // Upload audio (if present) - separate from image
-            if (uploadSucceeded && event.audioUri != null) {
-                val audioUri = event.audioUri!!
-                val file = File(audioUri)
-                if (!file.exists()) {
-                    sensorRepository.updateEventUploadStatus(
-                        eventId = event.id,
-                        status = UploadStatus.FAILED,
-                        target = target.name,
-                        uploadedAt = null,
-                        failureReason = "Audio file not found: $audioUri"
-                    )
-                    hasFailure = true
-                    uploadSucceeded = false
-                } else {
-                    val payload = AlertPayload.MediaAlert(
-                        sensorType = event.sensorType,
-                        message = event.description,
-                        mediaFile = MediaFile(
-                            absolutePath = audioUri,
-                            mimeType = guessMimeType(audioUri),
-                            sizeBytes = file.length(),
-                            timestamp = event.timestamp.toEpochMilli()
-                        ),
-                        timestamp = event.timestamp.toEpochMilli()
-                    )
-
-                    val result = transport.send(payload)
-                    if (result.isFailure) {
-                        hasFailure = true
-                        uploadSucceeded = false
-                        val error = result.exceptionOrNull()?.message ?: "Unknown error"
-                        sensorRepository.updateEventUploadStatus(
-                            eventId = event.id,
-                            status = UploadStatus.FAILED,
-                            target = target.name,
-                            uploadedAt = null,
-                            failureReason = "Audio upload failed: $error"
-                        )
-                    } else if (transport.deliversMedia) {
-                        deleteMediaFile(audioUri)
-                    }
-                }
+            val payload = AlertPayload.MediaAlert(
+                sensorType = event.sensorType,
+                message = event.description,
+                mediaFile = MediaFile(
+                    absolutePath = path,
+                    mimeType = guessMimeType(path),
+                    sizeBytes = file.length(),
+                    timestamp = event.timestamp.toEpochMilli()
+                ),
+                timestamp = event.timestamp.toEpochMilli()
+            )
+            val result = transport.send(payload)
+            if (result.isFailure) {
+                sensorRepository.updateEventUploadStatus(
+                    eventId = event.id,
+                    status = UploadStatus.FAILED,
+                    target = target.name,
+                    uploadedAt = null,
+                    failureReason = "$label upload failed: ${result.exceptionOrNull()?.message ?: "Unknown error"}"
+                )
+                return SendOutcome.TRANSIENT_FAILURE
             }
+            if (transport.deliversMedia) deleteMediaFile(path)
+        }
 
-            // If no media, send text alert
-            if (uploadSucceeded && event.mediaUri == null && event.audioUri == null) {
-                val payload = AlertPayload.TextAlert(
+        if (media.isEmpty()) {
+            val result = transport.send(
+                AlertPayload.TextAlert(
                     sensorType = event.sensorType,
                     message = event.description,
                     timestamp = event.timestamp.toEpochMilli()
                 )
-                transport.send(payload)
-            }
-
-            // Mark as uploaded if all succeeded
-            if (uploadSucceeded) {
+            )
+            if (result.isFailure) {
                 sensorRepository.updateEventUploadStatus(
                     eventId = event.id,
-                    status = UploadStatus.UPLOADED,
+                    status = UploadStatus.FAILED,
                     target = target.name,
-                    uploadedAt = System.currentTimeMillis(),
-                    failureReason = null
+                    uploadedAt = null,
+                    failureReason = "Alert failed: ${result.exceptionOrNull()?.message ?: "Unknown error"}"
                 )
+                return SendOutcome.TRANSIENT_FAILURE
             }
         }
 
-        !hasFailure
+        sensorRepository.updateEventUploadStatus(
+            eventId = event.id,
+            status = UploadStatus.UPLOADED,
+            target = target.name,
+            uploadedAt = System.currentTimeMillis(),
+            failureReason = null
+        )
+        return SendOutcome.SENT
     }
 
     private fun guessMimeType(path: String): String {
@@ -235,5 +306,10 @@ class MediaUploadRepositoryImpl @Inject constructor(
                 Log.w("MediaUploadRepository", "Failed to delete media file: $path", e)
             }
         }
+    }
+
+    private companion object {
+        val SUMMARY_TIME_FORMAT: DateTimeFormatter =
+            DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault())
     }
 }

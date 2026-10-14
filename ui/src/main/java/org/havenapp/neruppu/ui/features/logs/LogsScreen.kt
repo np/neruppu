@@ -331,6 +331,7 @@ fun EventItem(event: Event) {
                         UploadStatus.PENDING -> IconIndicator(Icons.Default.Schedule, NeruppuAmber)
                         UploadStatus.UPLOADED -> IconIndicator(Icons.Default.CheckCircle, NeruppuGreen)
                         UploadStatus.FAILED -> IconIndicator(Icons.Default.Error, NeruppuRed)
+                        UploadStatus.GROUPED -> IconIndicator(Icons.Default.Inventory2, TextSecondary)
                     }
                 }
             }
@@ -425,6 +426,7 @@ fun EventItem(event: Event) {
                         val targetText = when (event.uploadTarget) {
                             "TELEGRAM" -> "Uploaded to Telegram"
                             "MATRIX" -> "Uploaded to Matrix"
+                            "HTTPS" -> "Uploaded to HTTPS webhook"
                             else -> "Uploaded"
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -438,6 +440,13 @@ fun EventItem(event: Event) {
                             Icon(Icons.Default.Error, null, modifier = Modifier.size(14.dp), tint = NeruppuRed)
                             Spacer(modifier = Modifier.width(4.dp))
                             Text("Upload failed", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    UploadStatus.GROUPED -> {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Inventory2, null, modifier = Modifier.size(14.dp), tint = TextSecondary)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("In incident summary · kept on device", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }

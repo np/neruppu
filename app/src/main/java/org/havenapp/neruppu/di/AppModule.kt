@@ -29,6 +29,9 @@ import dagger.hilt.components.SingletonComponent
 import org.havenapp.neruppu.data.camera.CameraManager
 import org.havenapp.neruppu.data.https.HttpsAlertTransport
 import org.havenapp.neruppu.data.local.AlertTargetStore
+import org.havenapp.neruppu.data.local.SharedPrefsAlertGroupingStore
+import org.havenapp.neruppu.data.worker.MediaUploadWorker
+import org.havenapp.neruppu.data.worker.UploadRunScheduler
 import org.havenapp.neruppu.data.local.DeletePasswordStore
 import org.havenapp.neruppu.data.local.dao.EventDao
 import org.havenapp.neruppu.data.local.NeruppuDatabase
@@ -105,7 +108,8 @@ object AppModule {
         alertTargetRepository: AlertTargetRepository,
         telegramTransport: TelegramAlertTransport,
         matrixTransport: MatrixAlertTransport,
-        httpsTransport: HttpsAlertTransport
+        httpsTransport: HttpsAlertTransport,
+        groupingStore: SharedPrefsAlertGroupingStore
     ): MediaUploadRepository {
         return MediaUploadRepositoryImpl(
             context = context,
@@ -113,7 +117,9 @@ object AppModule {
             alertTargetRepository = alertTargetRepository,
             telegramTransport = telegramTransport,
             matrixTransport = matrixTransport,
-            httpsTransport = httpsTransport
+            httpsTransport = httpsTransport,
+            groupingStore = groupingStore,
+            runScheduler = UploadRunScheduler { delayMs -> MediaUploadWorker.scheduleRun(context, delayMs) }
         )
     }
 
