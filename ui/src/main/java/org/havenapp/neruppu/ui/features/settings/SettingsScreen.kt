@@ -39,6 +39,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Http
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockReset
 import androidx.compose.material.icons.filled.Message
@@ -114,12 +115,14 @@ fun SettingsScreen(
     onSavePhotosToggle: (Boolean) -> Unit,
     telegramViewModel: TelegramSettingsViewModel = hiltViewModel(),
     matrixViewModel: MatrixSettingsViewModel = hiltViewModel(),
+    httpsViewModel: HttpsSettingsViewModel = hiltViewModel(),
     deletePasswordViewModel: DeletePasswordSettingsViewModel = hiltViewModel(),
     encryptionViewModel: EncryptionSettingsViewModel = hiltViewModel()
 ) {
 
     val telegramUiState by telegramViewModel.uiState.collectAsState()
     val matrixUiState by matrixViewModel.uiState.collectAsState()
+    val httpsUiState by httpsViewModel.uiState.collectAsState()
     val deletePasswordUiState by deletePasswordViewModel.uiState.collectAsState()
     val encryptionUiState by encryptionViewModel.uiState.collectAsState()
 
@@ -127,6 +130,7 @@ fun SettingsScreen(
 
     var showTelegramConfig by remember { mutableStateOf(false) }
     var showMatrixConfig by remember { mutableStateOf(false) }
+    var showHttpsConfig by remember { mutableStateOf(false) }
     var showEncryptionConfig by remember { mutableStateOf(false) }
     var showSetupPasswordDialog by remember { mutableStateOf(false) }
     var showChangePasswordDialog by remember { mutableStateOf(false) }
@@ -182,6 +186,22 @@ fun SettingsScreen(
             placeholder = "syt_...",
             value = matrixUiState.accessToken,
             onValueChange = matrixViewModel::onTokenChange,
+            isPassword = true
+        )
+    )
+
+    val httpsFields = listOf(
+        IntegrationField(
+            label = "Endpoint URL",
+            placeholder = "https://example.org/neruppu",
+            value = httpsUiState.endpointUrl,
+            onValueChange = httpsViewModel::onEndpointUrlChange
+        ),
+        IntegrationField(
+            label = "Bearer token (optional)",
+            placeholder = "sent as Authorization: Bearer …",
+            value = httpsUiState.authToken,
+            onValueChange = httpsViewModel::onAuthTokenChange,
             isPassword = true
         )
     )
@@ -303,6 +323,12 @@ fun SettingsScreen(
                         label = "Matrix Alerts",
                         isConfigured = matrixUiState.isSaved,
                         onClick = { showMatrixConfig = true }
+                    )
+                    IntegrationSettingRow(
+                        icon = Icons.Default.Http,
+                        label = "HTTPS Webhook",
+                        isConfigured = httpsUiState.isSaved,
+                        onClick = { showHttpsConfig = true }
                     )
                 }
             }
@@ -441,6 +467,16 @@ fun SettingsScreen(
         actions = matrixViewModel,
         fields = matrixFields,
         descriptionText = "Provide Matrix credentials to receive real-time alerts on other devices."
+    )
+
+    IntegrationConfigPopup(
+        integrationType = IntegrationType.HTTPS,
+        isVisible = showHttpsConfig,
+        onDismiss = { showHttpsConfig = false },
+        uiState = httpsUiState,
+        actions = httpsViewModel,
+        fields = httpsFields,
+        descriptionText = "Each alert is POSTed as multipart/form-data to your own HTTPS endpoint. Captures are sent as the encrypted .age file."
     )
 }
 

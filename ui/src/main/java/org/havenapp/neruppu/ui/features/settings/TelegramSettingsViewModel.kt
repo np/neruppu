@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.havenapp.neruppu.domain.di.TelegramTransport
 import org.havenapp.neruppu.domain.repository.TelegramConfigRepository
+import org.havenapp.neruppu.domain.repository.HttpsConfigRepository
 import org.havenapp.neruppu.domain.repository.MatrixConfigRepository
 import org.havenapp.neruppu.domain.repository.AlertTargetRepository
 import org.havenapp.neruppu.domain.transport.AlertTransport
@@ -47,6 +48,7 @@ data class TelegramUiState(
 class TelegramSettingsViewModel @Inject constructor(
     private val configRepository: TelegramConfigRepository,
     private val matrixConfigRepository: MatrixConfigRepository,
+    private val httpsConfigRepository: HttpsConfigRepository,
     private val alertTargetRepository: AlertTargetRepository,
     @TelegramTransport private val alertTransport: AlertTransport
 ) : ViewModel(), IntegrationConfigActions {
@@ -74,6 +76,7 @@ class TelegramSettingsViewModel @Inject constructor(
         _uiState.update { it.copy(isSaved = configRepository.isComplete) }
         if (configRepository.isComplete) {
             matrixConfigRepository.clear()
+            httpsConfigRepository.clear()
             alertTargetRepository.setActiveTarget(AlertTarget.TELEGRAM)
         }
     }

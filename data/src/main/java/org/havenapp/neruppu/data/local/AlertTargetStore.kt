@@ -51,6 +51,7 @@ class AlertTargetStore @Inject constructor(
             return when (value) {
                 "TELEGRAM" -> AlertTarget.TELEGRAM
                 "MATRIX" -> AlertTarget.MATRIX
+                "HTTPS" -> AlertTarget.HTTPS
                 else -> AlertTarget.NONE
             }
         }

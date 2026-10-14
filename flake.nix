@@ -146,6 +146,12 @@
             text = builtins.readFile ./tools/neruppu-decrypt;
           };
 
+          neruppu-receiver = pkgs.writeShellApplication {
+            name = "neruppu-receiver";
+            runtimeInputs = [ pkgs.python3 ];
+            text = ''exec python3 -I ${./tools/neruppu-receiver} "$@"'';
+          };
+
           default = neruppu-age;
         });
 
@@ -155,11 +161,16 @@
           program = "${self.packages.${pkgs.stdenv.hostPlatform.system}.neruppu-decrypt}/bin/neruppu-decrypt";
           meta.description = "Decrypt Neruppu captures (.age) with an age identity";
         };
+        neruppu-receiver = {
+          type = "app";
+          program = "${self.packages.${pkgs.stdenv.hostPlatform.system}.neruppu-receiver}/bin/neruppu-receiver";
+          meta.description = "Minimal endpoint for the HTTPS webhook transport";
+        };
       });
 
       checks = forAllSystems (pkgs: {
         # Builds the AAR and runs the Go round-trip tests against the age CLI.
-        inherit (self.packages.${pkgs.stdenv.hostPlatform.system}) neruppu-age neruppu-decrypt;
+        inherit (self.packages.${pkgs.stdenv.hostPlatform.system}) neruppu-age neruppu-decrypt neruppu-receiver;
       });
 
       devShells = forAllSystems (pkgs:

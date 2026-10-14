@@ -24,6 +24,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.havenapp.neruppu.data.storage.MediaStorageRepositoryImpl
 import org.havenapp.neruppu.data.worker.MediaUploadWorker
+import org.havenapp.neruppu.domain.di.HttpsTransport
 import org.havenapp.neruppu.domain.di.MatrixTransport
 import org.havenapp.neruppu.domain.di.TelegramTransport
 import org.havenapp.neruppu.domain.model.AlertPayload
@@ -45,7 +46,8 @@ class MediaUploadRepositoryImpl @Inject constructor(
     private val sensorRepository: SensorRepository,
     private val alertTargetRepository: AlertTargetRepository,
     @TelegramTransport private val telegramTransport: AlertTransport,
-    @MatrixTransport private val matrixTransport: AlertTransport
+    @MatrixTransport private val matrixTransport: AlertTransport,
+    @HttpsTransport private val httpsTransport: AlertTransport
 ) : MediaUploadRepository {
 
     override suspend fun enqueueUpload(eventId: Long) {
@@ -72,6 +74,7 @@ class MediaUploadRepositoryImpl @Inject constructor(
             val transport = when (target) {
                 AlertTarget.TELEGRAM -> telegramTransport
                 AlertTarget.MATRIX -> matrixTransport
+                AlertTarget.HTTPS -> httpsTransport
                 AlertTarget.NONE -> null
             }
 

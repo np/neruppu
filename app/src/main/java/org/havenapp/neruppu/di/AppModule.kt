@@ -27,6 +27,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import org.havenapp.neruppu.data.camera.CameraManager
+import org.havenapp.neruppu.data.https.HttpsAlertTransport
 import org.havenapp.neruppu.data.local.AlertTargetStore
 import org.havenapp.neruppu.data.local.DeletePasswordStore
 import org.havenapp.neruppu.data.local.dao.EventDao
@@ -103,14 +104,16 @@ object AppModule {
         sensorRepository: SensorRepository,
         alertTargetRepository: AlertTargetRepository,
         telegramTransport: TelegramAlertTransport,
-        matrixTransport: MatrixAlertTransport
+        matrixTransport: MatrixAlertTransport,
+        httpsTransport: HttpsAlertTransport
     ): MediaUploadRepository {
         return MediaUploadRepositoryImpl(
             context = context,
             sensorRepository = sensorRepository,
             alertTargetRepository = alertTargetRepository,
             telegramTransport = telegramTransport,
-            matrixTransport = matrixTransport
+            matrixTransport = matrixTransport,
+            httpsTransport = httpsTransport
         )
     }
 

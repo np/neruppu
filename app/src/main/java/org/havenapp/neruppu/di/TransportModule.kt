@@ -21,15 +21,19 @@ import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import org.havenapp.neruppu.domain.di.HttpsTransport
 import org.havenapp.neruppu.domain.di.MatrixTransport
 import org.havenapp.neruppu.domain.di.TelegramTransport
 import org.havenapp.neruppu.data.crypto.AgeRecipientStore
+import org.havenapp.neruppu.data.https.HttpsAlertTransport
+import org.havenapp.neruppu.data.https.HttpsConfigStore
 import org.havenapp.neruppu.data.matrix.MatrixAlertTransport
 import org.havenapp.neruppu.data.matrix.MatrixConfigStore
 import org.havenapp.neruppu.data.telegram.TelegramAlertTransport
 import org.havenapp.neruppu.data.telegram.TelegramConfigStore
 import org.havenapp.neruppu.data.storage.MediaStorageRepositoryImpl
 import org.havenapp.neruppu.domain.repository.EncryptionKeyRepository
+import org.havenapp.neruppu.domain.repository.HttpsConfigRepository
 import org.havenapp.neruppu.domain.repository.MatrixConfigRepository
 import org.havenapp.neruppu.domain.repository.TelegramConfigRepository
 import org.havenapp.neruppu.domain.repository.MediaStorageRepository
@@ -57,6 +61,19 @@ abstract class TransportModule {
     @MatrixTransport
     abstract fun bindMatrixTransport(
         impl: MatrixAlertTransport
+    ): AlertTransport
+
+    @Binds
+    @Singleton
+    abstract fun bindHttpsConfig(
+        impl: HttpsConfigStore
+    ): HttpsConfigRepository
+
+    @Binds
+    @Singleton
+    @HttpsTransport
+    abstract fun bindHttpsTransport(
+        impl: HttpsAlertTransport
     ): AlertTransport
 
     @Binds

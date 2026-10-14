@@ -45,6 +45,7 @@ class MediaUploadRepositoryTest {
     private lateinit var alertTargetRepository: AlertTargetRepository
     private lateinit var telegramTransport: AlertTransport
     private lateinit var matrixTransport: AlertTransport
+    private lateinit var httpsTransport: AlertTransport
     private lateinit var mediaUploadRepository: MediaUploadRepository
 
     private lateinit var testFile: File
@@ -55,12 +56,14 @@ class MediaUploadRepositoryTest {
         alertTargetRepository = mockk(relaxed = true)
         telegramTransport = mockk()
         matrixTransport = mockk()
+        httpsTransport = mockk()
         mediaUploadRepository = MediaUploadRepositoryImpl(
             context = mockk(),
             sensorRepository = sensorRepository,
             alertTargetRepository = alertTargetRepository,
             telegramTransport = telegramTransport,
-            matrixTransport = matrixTransport
+            matrixTransport = matrixTransport,
+            httpsTransport = httpsTransport
         )
         testFile = tempFolder.newFile("test.jpg")
         testFile.writeBytes(byteArrayOf(1, 2, 3))
@@ -168,6 +171,34 @@ class MediaUploadRepositoryTest {
             failureReason = null
         ) }
         assertFalse(testFile.exists())
+    }
+
+    @Test
+    fun `TC-MUP-07 HTTPS target uploads via https transport`() = runBlocking {
+        val event = Event(
+            id = 1L,
+            sensorType = SensorType.CAMERA_MOTION,
+            description = "Motion",
+            mediaUri = testFile.absolutePath,
+            uploadStatus = UploadStatus.PENDING
+        )
+        every { alertTargetRepository.activeTarget } returns AlertTarget.HTTPS
+        coEvery { sensorRepository.getPendingUploadEvents(any()) } returns listOf(event)
+        coEvery { httpsTransport.send(any()) } returns Result.success(Unit)
+        coEvery { sensorRepository.updateEventUploadStatus(any(), any(), any(), any(), any()) } just Runs
+
+        assertTrue(mediaUploadRepository.uploadPendingEvents())
+
+        coVerify(exactly = 1) { httpsTransport.send(any()) }
+        coVerify(exactly = 0) { telegramTransport.send(any()) }
+        coVerify(exactly = 0) { matrixTransport.send(any()) }
+        coVerify { sensorRepository.updateEventUploadStatus(
+            eventId = 1L,
+            status = UploadStatus.UPLOADED,
+            target = "HTTPS",
+            uploadedAt = any(),
+            failureReason = null
+        ) }
     }
 
     @Test

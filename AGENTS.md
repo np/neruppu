@@ -25,6 +25,8 @@ Remote alerts are sent via the **Matrix Protocol** using a lightweight Ktor-base
 *   **Process**: Initial text alert sent -> Media (Image/Audio) uploaded to Homeserver -> Media event sent.
 *   **Security**: Matrix credentials (Homeserver URL, Room ID, Access Token) are stored in `EncryptedSharedPreferences`.
 
+*   **Other channels**: Telegram (`TelegramAlertTransport`) and a generic **HTTPS webhook** (`HttpsAlertTransport`: one multipart POST per alert to a user-run `https://` endpoint, optional bearer token; wire format in `docs/https-transport.md`, reference receiver `tools/neruppu-receiver`). Exactly one channel is active (`AlertTarget`); saving one clears the others.
+
 ## 5. Security & Privacy Features
 *   **Offline-First**: All logs and media are stored locally in the `Downloads/Neruppu` folder (via MediaStore) and an internal Room database.
 *   **Media Cleanup**: When clearing logs, users can optionally trigger a physical file deletion for all associated media.

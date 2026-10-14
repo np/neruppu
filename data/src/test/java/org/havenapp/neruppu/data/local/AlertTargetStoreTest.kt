@@ -25,10 +25,11 @@ class AlertTargetStoreTest {
 
     @Test
     fun `TC-TARGET-01 AlertTarget enum values`() {
-        assertEquals(3, AlertTarget.values().size)
+        assertEquals(4, AlertTarget.values().size)
         assertEquals(AlertTarget.NONE, AlertTarget.valueOf("NONE"))
         assertEquals(AlertTarget.TELEGRAM, AlertTarget.valueOf("TELEGRAM"))
         assertEquals(AlertTarget.MATRIX, AlertTarget.valueOf("MATRIX"))
+        assertEquals(AlertTarget.HTTPS, AlertTarget.valueOf("HTTPS"))
     }
 
     @Test

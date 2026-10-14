@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.havenapp.neruppu.domain.di.MatrixTransport
+import org.havenapp.neruppu.domain.repository.HttpsConfigRepository
 import org.havenapp.neruppu.domain.repository.MatrixConfigRepository
 import org.havenapp.neruppu.domain.repository.TelegramConfigRepository
 import org.havenapp.neruppu.domain.repository.AlertTargetRepository
@@ -48,6 +49,7 @@ data class MatrixUiState(
 class MatrixSettingsViewModel @Inject constructor(
     private val configRepository: MatrixConfigRepository,
     private val telegramConfigRepository: TelegramConfigRepository,
+    private val httpsConfigRepository: HttpsConfigRepository,
     private val alertTargetRepository: AlertTargetRepository,
     @MatrixTransport private val alertTransport: AlertTransport
 ) : ViewModel(), IntegrationConfigActions {
@@ -81,6 +83,7 @@ class MatrixSettingsViewModel @Inject constructor(
         _uiState.update { it.copy(isSaved = configRepository.isComplete) }
         if (configRepository.isComplete) {
             telegramConfigRepository.clear()
+            httpsConfigRepository.clear()
             alertTargetRepository.setActiveTarget(AlertTarget.MATRIX)
         }
     }

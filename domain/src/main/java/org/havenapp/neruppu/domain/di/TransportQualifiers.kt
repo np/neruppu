@@ -26,3 +26,7 @@ annotation class MatrixTransport
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class TelegramTransport
+
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class HttpsTransport

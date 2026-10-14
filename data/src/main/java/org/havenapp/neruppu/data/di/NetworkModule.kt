@@ -30,6 +30,7 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logger
 import io.ktor.client.plugins.logging.Logging
+import io.ktor.http.HttpHeaders
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import javax.inject.Singleton
@@ -57,6 +58,8 @@ object NetworkModule {
                     }
                 }
                 level = if (BuildConfig.DEBUG) LogLevel.ALL else LogLevel.NONE
+                // Bearer tokens (Matrix, HTTPS endpoint) stay out of logcat even in debug.
+                sanitizeHeader { header -> header == HttpHeaders.Authorization }
             }
             install(HttpTimeout) {
                 requestTimeoutMillis = 60_000
