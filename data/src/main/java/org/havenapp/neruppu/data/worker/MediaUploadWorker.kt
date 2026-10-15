@@ -82,14 +82,17 @@ class MediaUploadWorker(
                         .setRequiredNetworkType(NetworkType.CONNECTED)
                         .build()
                 )
-                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.MINUTES)
+                .setBackoffCriteria(BackoffPolicy.LINEAR, RETRY_BACKOFF_SECONDS, TimeUnit.SECONDS)
                 .build()
 
-            // APPEND_OR_REPLACE, not KEEP: an event arriving while a run is in
-            // progress must get a run of its own, or it waits for the next event.
+            // KEEP: one run uploads every pending event, so a run that is
+            // waiting (or retrying) already covers this one. APPEND would chain
+            // new events behind a retrying run and hold them until it succeeds.
+            // While guarding, MonitoringService delivers directly; this is the
+            // fallback.
             WorkManager.getInstance(context).enqueueUniqueWork(
                 UNIQUE_WORK_NAME,
-                ExistingWorkPolicy.APPEND_OR_REPLACE,
+                ExistingWorkPolicy.KEEP,
                 request
             )
         }
@@ -107,12 +110,19 @@ class MediaUploadWorker(
                         .setRequiredNetworkType(NetworkType.CONNECTED)
                         .build()
                 )
-                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.MINUTES)
+                .setBackoffCriteria(BackoffPolicy.LINEAR, RETRY_BACKOFF_SECONDS, TimeUnit.SECONDS)
                 .addTag(FLUSH_TAG)
                 .build()
             WorkManager.getInstance(context).enqueue(request)
         }
 
         private const val FLUSH_TAG = "media_upload_flush"
+
+        /**
+         * Linear 1, 2, 3... min. The former exponential backoff from 15 min
+         * reached hours after a few failures (15+30+60+120+240 min), holding
+         * every later alert back for most of a day.
+         */
+        private const val RETRY_BACKOFF_SECONDS = 60L
     }
 }

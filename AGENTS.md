@@ -33,6 +33,8 @@ Remote alerts are sent via the **Matrix Protocol** using a lightweight Ktor-base
 
 *   **Alert grouping & hourly cap**: `MediaUploadRepositoryImpl` runs pending events through `AlertGrouping` (pure, `domain/util`). The first event of an incident is sent at once; later ones become `UploadStatus.GROUPED` (capture kept on device) and one summary ("+N more events since HH:mm:ss", no sensor types) plus the first grouped capture goes out per window (Settings → Remote alerts, `alert_group_window_seconds`, default 120 s, 0 = off). An incident ends after 5 min without events. At most `alert_hourly_cap` alerts per rolling hour (default 30, 0 = unlimited); excess is grouped. State persists in `neruppu_alert_grouping` prefs; a delayed `MediaUploadWorker.scheduleRun` sends a due summary without waiting for a new event. A transient send failure stops the run so order is kept on retry.
 
+*   **Delivery path**: while guarding, `MonitoringService.deliverAlerts()` calls `uploadPendingEvents()` directly right after each event (a foreground service keeps network access in Doze), and a 60 s tick sends due summaries/retries. `MediaUploadWorker` (KEEP, linear 1-min backoff) is only the fallback when direct delivery fails or the service is not running. Event notifications are posted directly by the service, not via WorkManager. Do not route time-critical alerts through WorkManager: Doze defers jobs to maintenance windows hours apart.
+
 ## 5. Security & Privacy Features
 *   **Offline-First**: All logs and media are stored locally in the `Downloads/Neruppu` folder (via MediaStore) and an internal Room database.
 *   **Media Cleanup**: When clearing logs, users can optionally trigger a physical file deletion for all associated media.

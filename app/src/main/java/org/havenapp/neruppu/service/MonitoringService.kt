@@ -38,9 +38,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleService
-import androidx.work.Data
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -58,7 +55,6 @@ import org.havenapp.neruppu.domain.repository.MediaUploadRepository
 import org.havenapp.neruppu.domain.repository.SensorRepository
 import org.havenapp.neruppu.domain.usecase.HandleSensorEventUseCase
 import org.havenapp.neruppu.domain.usecase.AttachAudioToEventUseCase
-import org.havenapp.neruppu.worker.EventNotificationWorker
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -121,6 +117,7 @@ class MonitoringService : LifecycleService() {
     private val _armedAtElapsed = MutableStateFlow(0L)
     val armedAtElapsed: StateFlow<Long> = _armedAtElapsed
     private var armingJob: Job? = null
+    private var deliveryTickJob: Job? = null
 
     /** True once monitoring is on and the exit delay has elapsed. */
     private fun isArmed(): Boolean =
@@ -364,10 +361,13 @@ class MonitoringService : LifecycleService() {
                 .apply()
             startWakeLockIfNeeded()
             startArming()
+            startDeliveryTicks()
         } else {
             Log.d("MonitoringService", "Monitoring DEACTIVATED")
             armingJob?.cancel()
             armingJob = null
+            deliveryTickJob?.cancel()
+            deliveryTickJob = null
             _armedAtElapsed.value = 0L
             _lastGuardedTime.value = now
             getSharedPreferences("neruppu_prefs", MODE_PRIVATE)
@@ -598,9 +598,7 @@ class MonitoringService : LifecycleService() {
                         } catch (e: Exception) {
                             Log.w("MonitoringService", "Failed to delete temp audio file", e)
                         }
-                        if (alertTargetRepository.activeTarget != AlertTarget.NONE) {
-                            mediaUploadRepository.enqueueUpload(eventId)
-                        }
+                        deliverAlerts(eventId)
                     }
                 }
             }
@@ -656,34 +654,74 @@ class MonitoringService : LifecycleService() {
             Log.e("MonitoringService", "UseCase failed", result.exceptionOrNull())
         }
 
-        if (id > 0 && type != SensorType.MICROPHONE && alertTargetRepository.activeTarget != AlertTarget.NONE) {
-            serviceScope.launch {
-                try {
-                    mediaUploadRepository.enqueueUpload(id)
-                } catch (e: Exception) {
-                    Log.w("MonitoringService", "Failed to enqueue media upload for event $id", e)
-                }
-            }
+        // Microphone events are delivered once their audio clip is attached.
+        if (id > 0 && type != SensorType.MICROPHONE) {
+            serviceScope.launch { deliverAlerts(id) }
         }
-        
-        // Schedule deferred notification via WorkManager (Best Practice)
-        val workData = Data.Builder()
-            .putString("event_type", type.name)
-            .putString("description", description)
-            .build()
-        
-        val notificationWork = OneTimeWorkRequestBuilder<EventNotificationWorker>()
-            .setInputData(workData)
-            .build()
-            
-        WorkManager.getInstance(this).enqueueUniqueWork(
-            "security_notification",
-            androidx.work.ExistingWorkPolicy.REPLACE,
-            notificationWork
-        )
+
+        // Posted directly, not through WorkManager: in Doze, jobs wait for
+        // maintenance windows that can be hours apart.
+        postEventNotification(type, description)
 
         Log.i("MonitoringService", "EVENT PROCESSED: $type (Local ID: $id)")
         return id
+    }
+
+    /**
+     * Sends pending alerts right away from this foreground service, which keeps
+     * network access in Doze, unlike WorkManager jobs that are deferred to
+     * maintenance windows. WorkManager is only the fallback when this fails.
+     */
+    private suspend fun deliverAlerts(eventId: Long) {
+        if (alertTargetRepository.activeTarget == AlertTarget.NONE) return
+        val delivered = try {
+            mediaUploadRepository.uploadPendingEvents()
+        } catch (e: Exception) {
+            Log.w("MonitoringService", "Direct alert delivery failed for event $eventId", e)
+            false
+        }
+        if (!delivered) {
+            try {
+                mediaUploadRepository.enqueueUpload(eventId)
+            } catch (e: Exception) {
+                Log.w("MonitoringService", "Failed to enqueue media upload for event $eventId", e)
+            }
+        }
+    }
+
+    /**
+     * While guarding, sends incident summaries and retries failed alerts on
+     * time; the WorkManager runs scheduled for that would be deferred in Doze.
+     * Cheap when there is nothing to do: one DB query.
+     */
+    private fun startDeliveryTicks() {
+        deliveryTickJob?.cancel()
+        deliveryTickJob = serviceScope.launch {
+            while (isActive && _isMonitoring.value) {
+                delay(DELIVERY_TICK_MS)
+                if (alertTargetRepository.activeTarget == AlertTarget.NONE) continue
+                try {
+                    mediaUploadRepository.uploadPendingEvents()
+                } catch (e: Exception) {
+                    Log.w("MonitoringService", "Periodic alert delivery failed", e)
+                }
+            }
+        }
+    }
+
+    private fun postEventNotification(type: SensorType, description: String) {
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("Security Event: ${type.name}")
+            .setContentText(description)
+            .setSmallIcon(R.drawable.ic_stat_security)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .build()
+        try {
+            // One id: a new event replaces the previous notification.
+            notificationManager.notify(EVENT_NOTIFICATION_ID, notification)
+        } catch (e: SecurityException) {
+            Log.w("MonitoringService", "Notification permission missing", e)
+        }
     }
 
     private fun createNotificationChannel() {
@@ -781,6 +819,7 @@ class MonitoringService : LifecycleService() {
         stopWakeLockIfNeeded()
         heartbeatJob?.cancel()
         armingJob?.cancel()
+        deliveryTickJob?.cancel()
         sensorsJob?.cancel()
         uiSensorsJob?.cancel()
         serviceScope.cancel()
@@ -791,6 +830,8 @@ class MonitoringService : LifecycleService() {
         const val NOTIFICATION_ID = 1
         const val ERROR_NOTIFICATION_ID = 2
         const val ARMED_NOTIFICATION_ID = 3
+        const val EVENT_NOTIFICATION_ID = 4
+        private const val DELIVERY_TICK_MS = 60_000L
         const val CHANNEL_ID = "monitoring_channel"
         const val STATUS_CHANNEL_ID = "guard_status_channel"
 

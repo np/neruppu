@@ -209,6 +209,34 @@ class MonitoringServiceTest {
     }
 
     @Test
+    fun `TC-SVC-09 Alerts are delivered directly, WorkManager only as fallback`() {
+        setArmingDelay(0)
+        coEvery { mediaUploadRepository.uploadPendingEvents() } returns true
+        service.toggleMonitoring()
+
+        service.onStartCommand(motionIntent(), 0, 1)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+
+        coVerify(exactly = 1) { mediaUploadRepository.uploadPendingEvents() }
+        coVerify(exactly = 0) { mediaUploadRepository.enqueueUpload(any()) }
+        // Local notification posted at once, not via a deferred job.
+        val nm = RuntimeEnvironment.getApplication().getSystemService(android.app.NotificationManager::class.java)
+        assertTrue(org.robolectric.Shadows.shadowOf(nm).getNotification(MonitoringService.EVENT_NOTIFICATION_ID) != null)
+    }
+
+    @Test
+    fun `TC-SVC-10 A failed direct delivery falls back to WorkManager`() {
+        setArmingDelay(0)
+        coEvery { mediaUploadRepository.uploadPendingEvents() } returns false
+        service.toggleMonitoring()
+
+        service.onStartCommand(motionIntent(), 0, 1)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+
+        coVerify(exactly = 1) { mediaUploadRepository.enqueueUpload(1L) }
+    }
+
+    @Test
     fun `TC-SVC-05 UI active mode binds camera even if not monitoring`() {
         service.setUiActive(true)
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
