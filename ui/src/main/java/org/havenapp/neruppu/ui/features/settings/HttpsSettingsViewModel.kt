@@ -59,7 +59,9 @@ class HttpsSettingsViewModel @Inject constructor(
     @HttpsTransport private val alertTransport: AlertTransport
 ) : ViewModel(), IntegrationConfigActions {
 
-    private val _uiState = MutableStateFlow(
+    private val _uiState = MutableStateFlow(storedState())
+
+    private fun storedState() =
         if (configRepository.endpointUrl.isBlank()) {
             HttpsPreset.NERUPPU_RECEIVER.toState()
         } else {
@@ -72,7 +74,12 @@ class HttpsSettingsViewModel @Inject constructor(
                 isSaved = configRepository.isComplete
             )
         }
-    )
+
+    /** Reloads after the settings changed elsewhere (remote-control pairing). */
+    fun refresh() {
+        _uiState.value = storedState()
+    }
+
     val uiState: StateFlow<HttpsUiState> = _uiState.asStateFlow()
 
     fun onEndpointUrlChange(value: String) = _uiState.update { it.copy(endpointUrl = value) }

@@ -208,28 +208,30 @@ class MainActivity : ComponentActivity() {
 
         val context = LocalContext.current
         val prefs = context.getSharedPreferences("neruppu_prefs", MODE_PRIVATE)
+        // Re-read when pairing applied a remote's settings to this phone.
+        val settingsVersion = remotePairing.settingsVersion
 
-        var motionEnabled by remember { mutableStateOf(prefs.getBoolean("motion_enabled", true)) }
-        var soundEnabled by remember { mutableStateOf(prefs.getBoolean("sound_enabled", true)) }
-        var lightEnabled by remember { mutableStateOf(prefs.getBoolean("light_enabled", false)) }
-        var motionSensitivity by remember { mutableStateOf(prefs.getFloat("motion_sensitivity", 0.5f)) }
-        var soundThreshold by remember { mutableStateOf(prefs.getFloat("sound_threshold", 0.6f)) }
-        var pushAlerts by remember { mutableStateOf(prefs.getBoolean("push_alerts", true)) }
-        var savePhotos by remember { mutableStateOf(prefs.getBoolean("save_photos", true)) }
-        var useFrontCamera by remember { mutableStateOf(prefs.getBoolean("use_front_camera", false)) }
-        var alertGroupWindowSeconds by remember {
+        var motionEnabled by remember(settingsVersion) { mutableStateOf(prefs.getBoolean("motion_enabled", true)) }
+        var soundEnabled by remember(settingsVersion) { mutableStateOf(prefs.getBoolean("sound_enabled", true)) }
+        var lightEnabled by remember(settingsVersion) { mutableStateOf(prefs.getBoolean("light_enabled", false)) }
+        var motionSensitivity by remember(settingsVersion) { mutableStateOf(prefs.getFloat("motion_sensitivity", 0.5f)) }
+        var soundThreshold by remember(settingsVersion) { mutableStateOf(prefs.getFloat("sound_threshold", 0.6f)) }
+        var pushAlerts by remember(settingsVersion) { mutableStateOf(prefs.getBoolean("push_alerts", true)) }
+        var savePhotos by remember(settingsVersion) { mutableStateOf(prefs.getBoolean("save_photos", true)) }
+        var useFrontCamera by remember(settingsVersion) { mutableStateOf(prefs.getBoolean("use_front_camera", false)) }
+        var alertGroupWindowSeconds by remember(settingsVersion) {
             mutableIntStateOf(prefs.getInt(
                 SharedPrefsAlertGroupingStore.PREF_WINDOW_SECONDS,
                 SharedPrefsAlertGroupingStore.DEFAULT_WINDOW_SECONDS
             ))
         }
-        var alertHourlyCap by remember {
+        var alertHourlyCap by remember(settingsVersion) {
             mutableIntStateOf(prefs.getInt(
                 SharedPrefsAlertGroupingStore.PREF_HOURLY_CAP,
                 SharedPrefsAlertGroupingStore.DEFAULT_HOURLY_CAP
             ))
         }
-        var armingDelaySeconds by remember {
+        var armingDelaySeconds by remember(settingsVersion) {
             mutableIntStateOf(prefs.getInt(
                 MonitoringService.PREF_ARMING_DELAY_SECONDS,
                 MonitoringService.DEFAULT_ARMING_DELAY_SECONDS

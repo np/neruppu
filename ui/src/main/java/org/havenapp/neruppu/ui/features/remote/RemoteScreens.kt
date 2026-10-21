@@ -111,7 +111,8 @@ fun RemotePairingRow(
     onBecomeRemote: (server: String) -> Unit,
     onPairAsGuard: (code: String) -> Unit,
     onUnpair: () -> Unit,
-    onClearError: () -> Unit
+    onClearError: () -> Unit,
+    onSendSettings: () -> Unit = {}
 ) {
     var open by remember { mutableStateOf(false) }
     Row(
@@ -151,6 +152,7 @@ fun RemotePairingRow(
             onBecomeRemote = onBecomeRemote,
             onPairAsGuard = onPairAsGuard,
             onUnpair = onUnpair,
+            onSendSettings = onSendSettings,
             onDismiss = {
                 open = false
                 onClearError()
@@ -165,6 +167,7 @@ private fun RemotePairingDialog(
     onBecomeRemote: (String) -> Unit,
     onPairAsGuard: (String) -> Unit,
     onUnpair: () -> Unit,
+    onSendSettings: () -> Unit,
     onDismiss: () -> Unit
 ) {
     var server by remember { mutableStateOf(DEFAULT_NTFY_SERVER) }
@@ -186,7 +189,9 @@ private fun RemotePairingDialog(
                     RemoteRole.NONE -> {
                         Text(
                             "Pair two phones: the remote gets the guarded phone's status and photos on demand, " +
-                                "end-to-end encrypted through ntfy. It cannot stop guarding.",
+                                "end-to-end encrypted through ntfy. It cannot stop guarding.\n\n" +
+                                "Configure the remote first: at pairing, the guarded phone takes its settings " +
+                                "(sensors, delays, alert channel with credentials, encryption keys).",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )
@@ -250,16 +255,44 @@ private fun RemotePairingDialog(
                                 Text("Copy the code instead", color = NeruppuOrange)
                             }
                         }
+                        Text(
+                            "The guarded phone also receives this phone's settings when it scans. " +
+                                "Changed a setting since? Send them again before scanning.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
+                        )
+                        OutlinedButton(
+                            onClick = onSendSettings,
+                            enabled = !state.busy,
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Send settings again") }
                     }
 
-                    RemoteRole.GUARD -> Text(
-                        "Paired. While guarding, this phone answers status and photo requests from its remote. " +
-                            "The remote's age key was added in Settings → Encryption.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
-                    )
+                    RemoteRole.GUARD -> {
+                        Text(
+                            "Paired. While guarding, this phone answers status and photo requests from its remote. " +
+                                "The remote's age key was added in Settings → Encryption.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
+                        )
+                        OutlinedButton(
+                            onClick = {
+                                scanner.launch(
+                                    ScanOptions()
+                                        .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                                        .setPrompt("Scan the code shown on the remote phone")
+                                        .setBeepEnabled(false)
+                                        .setOrientationLocked(false)
+                                )
+                            },
+                            enabled = !state.busy,
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Scan again to take the remote's settings") }
+                    }
                 }
 
+                if (state.busy) CircularProgressIndicator(Modifier.size(20.dp), color = NeruppuOrange, strokeWidth = 2.dp)
+                state.info?.let { Text(it, color = NeruppuGreen, style = MaterialTheme.typography.bodySmall) }
                 state.error?.let { Text(it, color = NeruppuRed, style = MaterialTheme.typography.bodySmall) }
 
                 if (state.role != RemoteRole.NONE) {

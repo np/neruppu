@@ -36,7 +36,8 @@ class RemoteControlRepositoryImpl @Inject constructor(
     private val config: RemoteConfigStore,
     private val ntfy: NtfyClient,
     private val keyring: AgeKeyring,
-    private val encryptionKeys: EncryptionKeyRepository
+    private val encryptionKeys: EncryptionKeyRepository,
+    private val settings: DeviceConfigSource
 ) : RemoteControlRepository {
 
     internal var clock: () -> Long = System::currentTimeMillis
@@ -60,7 +61,23 @@ class RemoteControlRepositoryImpl @Inject constructor(
     override fun pairingCode(): String? =
         if (config.role == RemoteRole.CONTROLLER) config.pairing?.let(RemoteProtocol::encodePairing) else null
 
-    override fun pairAsGuard(code: String): Result<Unit> = runCatching {
+    override suspend fun publishSettings(): Result<Unit> = runCatching {
+        check(config.role == RemoteRole.CONTROLLER) { "Not a remote control" }
+        val pairing = checkNotNull(config.pairing) { "Not paired" }
+        val sealed = RemoteProtocol.seal(
+            RemoteProtocol.json.encodeToString(settings.collect(clock())),
+            RemoteProtocol.keyBytes(pairing), pairing.topic, RemoteProtocol.Direction.CONFIG
+        )
+        val topic = RemoteProtocol.configTopic(pairing.topic)
+        if (sealed.length <= RemoteProtocol.MAX_INLINE_MESSAGE) {
+            ntfy.publish(pairing.server, topic, sealed)
+        } else {
+            // Long HTTPS templates or Matrix tokens exceed ntfy's message size.
+            ntfy.publishFile(pairing.server, topic, sealed.toByteArray(), "settings.nrp", "settings")
+        }
+    }
+
+    override suspend fun pairAsGuard(code: String): Result<Boolean> = runCatching {
         // A guarded phone must never hold an age identity.
         check(config.role != RemoteRole.CONTROLLER) {
             "This phone is a remote control. Unpair it first to guard with it."
@@ -71,6 +88,28 @@ class RemoteControlRepositoryImpl @Inject constructor(
         val keys = (encryptionKeys.recipients.lines() + pairing.recipient).map { it.trim() }.filter { it.isNotEmpty() }.distinct()
         check(encryptionKeys.setRecipients(keys)) { "Could not store the remote's age key" }
         config.saveGuard(pairing)
+        fetchSettings(pairing)?.let { settings.apply(it); true } ?: false
+    }
+
+    /** Newest valid settings published by the remote for this pairing, if still cached. */
+    private suspend fun fetchSettings(pairing: RemoteProtocol.Pairing): DeviceConfig? {
+        val key = RemoteProtocol.keyBytes(pairing)
+        val now = clock()
+        val events = runCatching { ntfy.poll(pairing.server, RemoteProtocol.configTopic(pairing.topic)) }
+            .getOrElse { return null }
+        for (event in events.asReversed()) {
+            val sealed = event.attachment?.url
+                ?.let { url -> runCatching { String(ntfy.download(url, MAX_SETTINGS_BYTES)) }.getOrNull() }
+                ?: event.message
+                ?: continue
+            val plain = RemoteProtocol.open(sealed, key, pairing.topic, RemoteProtocol.Direction.CONFIG) ?: continue
+            val received = runCatching { RemoteProtocol.json.decodeFromString(DeviceConfig.serializer(), plain) }
+                .getOrNull() ?: continue
+            if (received.ts > now + RemoteProtocol.MAX_CLOCK_SKEW_MS) continue
+            if (now - received.ts > RemoteProtocol.MAX_CONFIG_AGE_MS) continue
+            return received
+        }
+        return null
     }
 
     override fun unpair() = config.clear()
@@ -133,4 +172,8 @@ class RemoteControlRepositoryImpl @Inject constructor(
             }.getOrElse { RemoteUpdate.Failure(response.ts, it.message ?: "Photo could not be opened") }
             else -> RemoteUpdate.Failure(response.ts, response.error ?: "Error on the guarded phone")
         }
+
+    private companion object {
+        const val MAX_SETTINGS_BYTES = 64L * 1024
+    }
 }

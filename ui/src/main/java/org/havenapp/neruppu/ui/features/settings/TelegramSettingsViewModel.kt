@@ -62,6 +62,15 @@ class TelegramSettingsViewModel @Inject constructor(
     )
     val uiState: StateFlow<TelegramUiState> = _uiState.asStateFlow()
 
+    /** Reloads after the settings changed elsewhere (remote-control pairing). */
+    fun refresh() {
+        _uiState.value = TelegramUiState(
+            botToken = configRepository.botToken,
+            chatId = configRepository.chatId,
+            isSaved = configRepository.isComplete
+        )
+    }
+
     fun onTokenChange(value: String) {
         _uiState.update { it.copy(botToken = value) }
     }

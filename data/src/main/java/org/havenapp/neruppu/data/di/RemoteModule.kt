@@ -26,6 +26,8 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
 import org.havenapp.neruppu.data.remote.AgeKeyring
+import org.havenapp.neruppu.data.remote.DeviceConfigSource
+import org.havenapp.neruppu.data.remote.DeviceConfigTransfer
 import org.havenapp.neruppu.data.remote.EncryptedRemoteConfigStore
 import org.havenapp.neruppu.data.remote.GoAgeKeyring
 import org.havenapp.neruppu.data.remote.NtfyClient
@@ -51,6 +53,9 @@ abstract class RemoteModule {
 
     @Binds @Singleton
     abstract fun bindAgeKeyring(impl: GoAgeKeyring): AgeKeyring
+
+    @Binds @Singleton
+    abstract fun bindDeviceConfig(impl: DeviceConfigTransfer): DeviceConfigSource
 
     companion object {
         /**

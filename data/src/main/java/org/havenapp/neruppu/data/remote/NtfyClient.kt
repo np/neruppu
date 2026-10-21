@@ -28,6 +28,7 @@ import io.ktor.client.request.prepareGet
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsChannel
+import io.ktor.client.statement.bodyAsText
 import io.ktor.client.statement.readBytes
 import io.ktor.http.ContentType
 import io.ktor.http.content.ByteArrayContent
@@ -77,6 +78,20 @@ class NtfyClient(private val client: HttpClient) {
         val response = client.get(url)
         check(response.status.isSuccess()) { "ntfy download failed: ${response.status}" }
         return response.readBytes().also { check(it.size <= maxBytes) { "Attachment too large" } }
+    }
+
+    /** Messages still cached on the server for [topic], oldest first. */
+    suspend fun poll(server: String, topic: String): List<Event> {
+        val response = client.get("$server/$topic/json") {
+            parameter("poll", "1")
+            parameter("since", "all")
+        }
+        check(response.status.isSuccess()) { "ntfy poll failed: ${response.status}" }
+        return response.bodyAsText().lineSequence()
+            .filter { it.isNotBlank() }
+            .mapNotNull { runCatching { RemoteProtocol.json.decodeFromString(Event.serializer(), it) }.getOrNull() }
+            .filter { it.event == "message" }
+            .toList()
     }
 
     /**

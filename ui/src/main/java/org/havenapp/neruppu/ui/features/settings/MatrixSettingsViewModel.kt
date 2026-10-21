@@ -64,6 +64,16 @@ class MatrixSettingsViewModel @Inject constructor(
     )
     val uiState: StateFlow<MatrixUiState> = _uiState.asStateFlow()
 
+    /** Reloads after the settings changed elsewhere (remote-control pairing). */
+    fun refresh() {
+        _uiState.value = MatrixUiState(
+            homeserverUrl = configRepository.homeserverUrl,
+            roomId = configRepository.roomId,
+            accessToken = configRepository.accessToken,
+            isSaved = configRepository.isComplete
+        )
+    }
+
     fun onHomeserverChange(value: String) {
         _uiState.update { it.copy(homeserverUrl = value) }
     }

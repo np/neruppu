@@ -143,8 +143,13 @@ fun SettingsScreen(
     val deletePasswordUiState by deletePasswordViewModel.uiState.collectAsState()
     val encryptionUiState by encryptionViewModel.uiState.collectAsState()
     val remotePairingUiState by remotePairingViewModel.uiState.collectAsState()
-    // Pairing as guarded phone adds the remote's age key to the encryption keys.
-    LaunchedEffect(remotePairingUiState.role) { encryptionViewModel.refresh() }
+    // Pairing as guarded phone applies the remote's settings: show them.
+    LaunchedEffect(remotePairingUiState.role, remotePairingUiState.settingsVersion) {
+        encryptionViewModel.refresh()
+        telegramViewModel.refresh()
+        matrixViewModel.refresh()
+        httpsViewModel.refresh()
+    }
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -401,6 +406,7 @@ fun SettingsScreen(
                     onBecomeRemote = remotePairingViewModel::becomeRemote,
                     onPairAsGuard = remotePairingViewModel::pairAsGuard,
                     onUnpair = remotePairingViewModel::unpair,
+                    onSendSettings = remotePairingViewModel::sendSettings,
                     onClearError = remotePairingViewModel::clearError
                 )
 

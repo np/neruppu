@@ -53,11 +53,21 @@ interface RemoteControlRepository {
     /** Controller: creates keys and a channel; returns the pairing code to show as QR. */
     fun createControllerPairing(server: String): String
 
+    /**
+     * Controller: publishes this phone's settings (sensors, delays, alert
+     * channel with credentials, age keys) for the phone that pairs next.
+     */
+    suspend fun publishSettings(): Result<Unit>
+
     /** Controller: the pairing code again, or null if not a controller. */
     fun pairingCode(): String?
 
-    /** Guarded phone: stores the channel from a scanned code and trusts its age key. */
-    fun pairAsGuard(code: String): Result<Unit>
+    /**
+     * Guarded phone: stores the channel from a scanned code, trusts its age key
+     * and applies the remote's settings. True if the settings were applied,
+     * false if pairing worked but no settings could be fetched.
+     */
+    suspend fun pairAsGuard(code: String): Result<Boolean>
 
     /** Forgets the pairing on this phone (the age key added to the guarded phone stays until removed in Encryption). */
     fun unpair()

@@ -42,7 +42,12 @@ object RemoteProtocol {
     /** Commands and answers older or newer than this are ignored. */
     const val MAX_CLOCK_SKEW_MS = 5 * 60 * 1000L
 
-    enum class Direction(val tag: String) { COMMAND("cmd"), RESPONSE("rsp") }
+    enum class Direction(val tag: String) { COMMAND("cmd"), RESPONSE("rsp"), CONFIG("cfg") }
+
+    /** A pairing config this old is no longer applied (ntfy.sh caches 12 h). */
+    const val MAX_CONFIG_AGE_MS = 24 * 60 * 60 * 1000L
+    /** Above this, a sealed message is sent as an ntfy attachment (body limit 4096 B). */
+    const val MAX_INLINE_MESSAGE = 3500
 
     internal val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val random = SecureRandom()
@@ -51,6 +56,8 @@ object RemoteProtocol {
 
     fun commandTopic(base: String) = "$base-c"
     fun responseTopic(base: String) = "$base-r"
+    /** Settings the remote hands over at pairing. */
+    fun configTopic(base: String) = "$base-p"
 
     fun newKey(): ByteArray = ByteArray(32).also(random::nextBytes)
     fun newTopic(): String = "nrp" + b64.encodeToString(ByteArray(16).also(random::nextBytes))

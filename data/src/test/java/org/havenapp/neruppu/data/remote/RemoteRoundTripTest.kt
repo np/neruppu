@@ -115,6 +115,11 @@ class RemoteRoundTripTest {
         override fun clear() { recipients = "" }
     }
 
+    private object NoSettings : DeviceConfigSource {
+        override fun collect(now: Long) = DeviceConfig(ts = now)
+        override fun apply(config: DeviceConfig) = Unit
+    }
+
     private val ntfyServer = FakeNtfy()
     private val ntfy = NtfyClient(HttpClient(ntfyServer.engine) { install(HttpTimeout) })
     private val keyring = FakeKeyring()
@@ -134,13 +139,13 @@ class RemoteRoundTripTest {
     fun `TC-RC-10 status and photo travel encrypted and come back readable`() = runBlocking {
         // Remote phone creates the pairing; guarded phone scans it.
         val remoteConfig = MemoryConfig()
-        val remote = RemoteControlRepositoryImpl(remoteConfig, ntfy, keyring, MemoryKeys())
+        val remote = RemoteControlRepositoryImpl(remoteConfig, ntfy, keyring, MemoryKeys(), NoSettings)
         val code = remote.createControllerPairing("https://ntfy.test")
         assertEquals(RemoteRole.CONTROLLER, remote.role)
 
         val guardConfig = MemoryConfig()
         val guardKeys = MemoryKeys()
-        val guardSide = RemoteControlRepositoryImpl(guardConfig, ntfy, keyring, guardKeys)
+        val guardSide = RemoteControlRepositoryImpl(guardConfig, ntfy, keyring, guardKeys, NoSettings)
         guardSide.pairAsGuard(code).getOrThrow()
         assertEquals(RemoteRole.GUARD, guardConfig.role)
         assertNull(guardConfig.identity)
@@ -175,21 +180,22 @@ class RemoteRoundTripTest {
     }
 
     @Test
-    fun `TC-RC-11 a remote phone refuses to become a guarded phone`() {
+    fun `TC-RC-11 a remote phone refuses to become a guarded phone`() = runBlocking {
         val config = MemoryConfig()
-        val repo = RemoteControlRepositoryImpl(config, ntfy, keyring, MemoryKeys())
+        val repo = RemoteControlRepositoryImpl(config, ntfy, keyring, MemoryKeys(), NoSettings)
         val code = repo.createControllerPairing("https://ntfy.test")
 
         val result = repo.pairAsGuard(code)
 
         assertTrue(result.isFailure)
         assertEquals(RemoteRole.CONTROLLER, config.role)
+        Unit
     }
 
     @Test
     fun `TC-RC-12 guard ignores replays, foreign text, and rate-limits photos`() = runBlocking {
         val remoteConfig = MemoryConfig()
-        val remote = RemoteControlRepositoryImpl(remoteConfig, ntfy, keyring, MemoryKeys())
+        val remote = RemoteControlRepositoryImpl(remoteConfig, ntfy, keyring, MemoryKeys(), NoSettings)
         remote.createControllerPairing("https://ntfy.test")
         val pairing = remoteConfig.pairing!!
         var now = 1_000_000L
@@ -212,5 +218,149 @@ class RemoteRoundTripTest {
         remote.send(RemoteCommand.STATUS).getOrThrow()
         now += RemoteProtocol.MAX_CLOCK_SKEW_MS + 1
         assertNull(handler.handle(ntfyServer.topics[RemoteProtocol.commandTopic(pairing.topic)]!!.last().message, device))
+    }
+
+    // --- Settings handed over at pairing ---------------------------------
+
+    private class MemoryPrefs : android.content.SharedPreferences {
+        val values = mutableMapOf<String, Any?>()
+        override fun getAll(): MutableMap<String, *> = values
+        override fun getString(key: String?, defValue: String?) = values[key] as String? ?: defValue
+        override fun getStringSet(key: String?, defValues: MutableSet<String>?) = defValues
+        override fun getInt(key: String?, defValue: Int) = values[key] as Int? ?: defValue
+        override fun getLong(key: String?, defValue: Long) = values[key] as Long? ?: defValue
+        override fun getFloat(key: String?, defValue: Float) = values[key] as Float? ?: defValue
+        override fun getBoolean(key: String?, defValue: Boolean) = values[key] as Boolean? ?: defValue
+        override fun contains(key: String?) = values.containsKey(key)
+        override fun registerOnSharedPreferenceChangeListener(l: android.content.SharedPreferences.OnSharedPreferenceChangeListener?) = Unit
+        override fun unregisterOnSharedPreferenceChangeListener(l: android.content.SharedPreferences.OnSharedPreferenceChangeListener?) = Unit
+        override fun edit(): android.content.SharedPreferences.Editor = object : android.content.SharedPreferences.Editor {
+            val pending = mutableMapOf<String, Any?>()
+            override fun putString(k: String?, v: String?) = apply { pending[k!!] = v }
+            override fun putStringSet(k: String?, v: MutableSet<String>?) = apply { pending[k!!] = v }
+            override fun putInt(k: String?, v: Int) = apply { pending[k!!] = v }
+            override fun putLong(k: String?, v: Long) = apply { pending[k!!] = v }
+            override fun putFloat(k: String?, v: Float) = apply { pending[k!!] = v }
+            override fun putBoolean(k: String?, v: Boolean) = apply { pending[k!!] = v }
+            override fun remove(k: String?) = apply { pending[k!!] = null }
+            override fun clear() = apply { values.clear() }
+            override fun commit(): Boolean { pending.forEach { (k, v) -> if (v == null) values.remove(k) else values[k] = v }; return true }
+            override fun apply() { commit() }
+        }
+    }
+
+    private class Target : org.havenapp.neruppu.domain.repository.AlertTargetRepository {
+        private var current = org.havenapp.neruppu.domain.model.AlertTarget.NONE
+        override val activeTarget get() = current
+        override fun setActiveTarget(target: org.havenapp.neruppu.domain.model.AlertTarget) { current = target }
+        override fun clearActiveTarget() { current = org.havenapp.neruppu.domain.model.AlertTarget.NONE }
+    }
+
+    private class Telegram : org.havenapp.neruppu.domain.repository.TelegramConfigRepository {
+        override var botToken = ""
+        override var chatId = ""
+        override val isComplete get() = botToken.isNotBlank() && chatId.isNotBlank()
+        override fun clear() { botToken = ""; chatId = "" }
+    }
+
+    private class Matrix : org.havenapp.neruppu.domain.repository.MatrixConfigRepository {
+        override var homeserverUrl = ""
+        override var roomId = ""
+        override var accessToken = ""
+        override val isComplete get() = homeserverUrl.isNotBlank() && roomId.isNotBlank() && accessToken.isNotBlank()
+        override fun clear() { homeserverUrl = ""; roomId = ""; accessToken = "" }
+    }
+
+    private class Https : org.havenapp.neruppu.domain.repository.HttpsConfigRepository {
+        override var endpointUrl = ""
+        override var bodyEncoding = org.havenapp.neruppu.domain.util.HttpsBodyEncoding.MULTIPART
+        override var headers = ""
+        override var fields = ""
+        override var fileField = ""
+        override val isComplete get() = endpointUrl.startsWith("https://") && fields.isNotBlank()
+        override fun clear() { endpointUrl = ""; headers = ""; fields = ""; fileField = "" }
+    }
+
+    private class Phone {
+        val prefs = MemoryPrefs()
+        val target = Target()
+        val telegram = Telegram()
+        val matrix = Matrix()
+        val https = Https()
+        val keys = MemoryKeys()
+        val config = MemoryConfig()
+        val settings = DeviceConfigTransfer({ prefs }, telegram, matrix, https, target, keys, { it.startsWith("age1") })
+    }
+
+    private fun repo(phone: Phone) = RemoteControlRepositoryImpl(phone.config, ntfy, keyring, phone.keys, phone.settings)
+
+    @Test
+    fun `TC-RC-13 pairing hands over sensors, delays, alert channel and age keys`() = runBlocking {
+        val remotePhone = Phone().apply {
+            prefs.edit().putBoolean("light_enabled", true).putFloat("motion_sensitivity", 0.8f)
+                .putInt("arming_delay_seconds", 300).putInt("alert_hourly_cap", 10)
+                .putString("session_start_time", "not a setting").commit()
+            telegram.botToken = "123:ABC"; telegram.chatId = "42"
+            target.setActiveTarget(org.havenapp.neruppu.domain.model.AlertTarget.TELEGRAM)
+            keys.recipients = "age1desktopkey"
+        }
+        val guardPhone = Phone().apply {
+            matrix.homeserverUrl = "https://old"; matrix.roomId = "!r"; matrix.accessToken = "t"
+            target.setActiveTarget(org.havenapp.neruppu.domain.model.AlertTarget.MATRIX)
+            keys.recipients = ""
+        }
+
+        val remote = repo(remotePhone)
+        val code = remote.createControllerPairing("https://ntfy.test")
+        remote.publishSettings().getOrThrow()
+        val published = ntfyServer.topics[RemoteProtocol.configTopic(remotePhone.config.pairing!!.topic)]!!.single()
+        assertFalse("123:ABC" in published.message)
+
+        assertEquals(true, repo(guardPhone).pairAsGuard(code).getOrThrow())
+
+        with(guardPhone) {
+            assertEquals(true, prefs.getBoolean("light_enabled", false))
+            assertEquals(0.8f, prefs.getFloat("motion_sensitivity", 0f))
+            assertEquals(300, prefs.getInt("arming_delay_seconds", 0))
+            assertEquals(10, prefs.getInt("alert_hourly_cap", 0))
+            assertFalse(prefs.contains("session_start_time"))
+            assertEquals(org.havenapp.neruppu.domain.model.AlertTarget.TELEGRAM, target.activeTarget)
+            assertEquals("123:ABC", telegram.botToken)
+            assertEquals("", matrix.accessToken)
+            // Remote's pairing key and its other keys, so both can open captures.
+            assertEquals(listOf("age1testrecipient", "age1desktopkey"), keys.recipients.lines())
+            assertEquals(RemoteRole.GUARD, config.role)
+        }
+    }
+
+    @Test
+    fun `TC-RC-14 a long HTTPS template travels as an attachment`() = runBlocking {
+        val remotePhone = Phone().apply {
+            https.endpointUrl = "https://api.example/hook"
+            https.bodyEncoding = org.havenapp.neruppu.domain.util.HttpsBodyEncoding.JSON
+            https.fields = (1..300).joinToString("\n") { "field$it={message}" }
+            target.setActiveTarget(org.havenapp.neruppu.domain.model.AlertTarget.HTTPS)
+        }
+        val guardPhone = Phone()
+
+        val remote = repo(remotePhone)
+        val code = remote.createControllerPairing("https://ntfy.test")
+        remote.publishSettings().getOrThrow()
+        assertTrue(ntfyServer.topics.values.flatten().single().file != null)
+
+        assertEquals(true, repo(guardPhone).pairAsGuard(code).getOrThrow())
+        assertEquals(remotePhone.https.fields, guardPhone.https.fields)
+        assertEquals(org.havenapp.neruppu.domain.util.HttpsBodyEncoding.JSON, guardPhone.https.bodyEncoding)
+        assertEquals(org.havenapp.neruppu.domain.model.AlertTarget.HTTPS, guardPhone.target.activeTarget)
+    }
+
+    @Test
+    fun `TC-RC-15 without published settings pairing still works and says so`() = runBlocking {
+        val remote = repo(Phone())
+        val code = remote.createControllerPairing("https://ntfy.test")
+        val guardPhone = Phone()
+
+        assertEquals(false, repo(guardPhone).pairAsGuard(code).getOrThrow())
+        assertEquals(RemoteRole.GUARD, guardPhone.config.role)
     }
 }

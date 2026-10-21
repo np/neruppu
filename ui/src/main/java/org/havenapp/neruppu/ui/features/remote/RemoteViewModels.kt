@@ -39,7 +39,11 @@ data class RemotePairingUiState(
     val role: RemoteRole = RemoteRole.NONE,
     /** Shown as QR on the remote; contains the channel secret. */
     val pairingCode: String? = null,
-    val error: String? = null
+    val error: String? = null,
+    val info: String? = null,
+    /** Bumped when settings were applied to this phone, so screens reload. */
+    val settingsVersion: Int = 0,
+    val busy: Boolean = false
 )
 
 @HiltViewModel
@@ -55,22 +59,58 @@ class RemotePairingViewModel @Inject constructor(
         viewModelScope.launch { refresh() }
     }
 
-    private suspend fun refresh(error: String? = null) {
+    private suspend fun refresh(error: String? = null, info: String? = null, settingsApplied: Boolean = false) {
         val (role, code) = withContext(Dispatchers.IO) { repository.role to repository.pairingCode() }
-        _uiState.value = RemotePairingUiState(role, code, error)
-    }
-
-    fun becomeRemote(server: String) {
-        viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) { runCatching { repository.createControllerPairing(server) } }
-            refresh(result.exceptionOrNull()?.message)
+        _uiState.update {
+            RemotePairingUiState(
+                role = role,
+                pairingCode = code,
+                error = error,
+                info = info,
+                settingsVersion = it.settingsVersion + if (settingsApplied) 1 else 0
+            )
         }
     }
 
+    fun becomeRemote(server: String) {
+        _uiState.update { it.copy(busy = true, error = null, info = null) }
+        viewModelScope.launch {
+            val created = withContext(Dispatchers.IO) { runCatching { repository.createControllerPairing(server) } }
+            if (created.isFailure) return@launch refresh(error = created.exceptionOrNull()?.message)
+            refresh(info = publishInfo(withContext(Dispatchers.IO) { repository.publishSettings() }))
+        }
+    }
+
+    /** Controller: after changing settings here, before the other phone scans. */
+    fun sendSettings() {
+        _uiState.update { it.copy(busy = true, error = null, info = null) }
+        viewModelScope.launch {
+            refresh(info = publishInfo(withContext(Dispatchers.IO) { repository.publishSettings() }))
+        }
+    }
+
+    private fun publishInfo(result: Result<Unit>) =
+        if (result.isSuccess) {
+            "This phone's settings are ready for the guarded phone (kept by ntfy for a few hours)."
+        } else {
+            "Settings not sent: ${result.exceptionOrNull()?.message}. Check the connection, then send them again."
+        }
+
     fun pairAsGuard(code: String) {
+        _uiState.update { it.copy(busy = true, error = null, info = null) }
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) { repository.pairAsGuard(code) }
-            refresh(result.exceptionOrNull()?.message)
+            val applied = result.getOrNull() == true
+            refresh(
+                error = result.exceptionOrNull()?.message,
+                info = when (result.getOrNull()) {
+                    true -> "Paired. The remote's settings and alert channel were applied."
+                    false -> "Paired, but the remote's settings could not be fetched: " +
+                        "on the remote, tap \"Send settings again\", then scan again."
+                    null -> null
+                },
+                settingsApplied = applied
+            )
         }
     }
 
@@ -81,7 +121,7 @@ class RemotePairingViewModel @Inject constructor(
         }
     }
 
-    fun clearError() = _uiState.update { it.copy(error = null) }
+    fun clearError() = _uiState.update { it.copy(error = null, info = null) }
 }
 
 data class RemoteControlUiState(
