@@ -30,3 +30,7 @@ annotation class TelegramTransport
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class HttpsTransport
+
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class NtfyTransport

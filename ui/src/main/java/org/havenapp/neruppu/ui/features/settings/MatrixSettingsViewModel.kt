@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.havenapp.neruppu.domain.di.MatrixTransport
 import org.havenapp.neruppu.domain.repository.HttpsConfigRepository
+import org.havenapp.neruppu.domain.repository.NtfyAlertConfigRepository
 import org.havenapp.neruppu.domain.repository.MatrixConfigRepository
 import org.havenapp.neruppu.domain.repository.TelegramConfigRepository
 import org.havenapp.neruppu.domain.repository.AlertTargetRepository
@@ -50,6 +51,7 @@ class MatrixSettingsViewModel @Inject constructor(
     private val configRepository: MatrixConfigRepository,
     private val telegramConfigRepository: TelegramConfigRepository,
     private val httpsConfigRepository: HttpsConfigRepository,
+    private val ntfyConfigRepository: NtfyAlertConfigRepository,
     private val alertTargetRepository: AlertTargetRepository,
     @MatrixTransport private val alertTransport: AlertTransport
 ) : ViewModel(), IntegrationConfigActions {
@@ -94,6 +96,7 @@ class MatrixSettingsViewModel @Inject constructor(
         if (configRepository.isComplete) {
             telegramConfigRepository.clear()
             httpsConfigRepository.clear()
+            ntfyConfigRepository.clear()
             alertTargetRepository.setActiveTarget(AlertTarget.MATRIX)
         }
     }

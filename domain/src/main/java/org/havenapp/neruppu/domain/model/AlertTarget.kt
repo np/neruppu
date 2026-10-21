@@ -21,5 +21,6 @@ enum class AlertTarget {
     NONE,
     TELEGRAM,
     MATRIX,
-    HTTPS
+    HTTPS,
+    NTFY
 }

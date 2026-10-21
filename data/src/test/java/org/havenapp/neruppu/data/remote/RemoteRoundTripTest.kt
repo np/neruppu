@@ -281,6 +281,15 @@ class RemoteRoundTripTest {
         override fun clear() { endpointUrl = ""; headers = ""; fields = ""; fileField = "" }
     }
 
+    private class Ntfy : org.havenapp.neruppu.domain.repository.NtfyAlertConfigRepository {
+        override var server = "https://ntfy.sh"
+        override var topic = ""
+        override var accessToken = ""
+        override var attachCaptures = true
+        override val isComplete get() = topic.isNotBlank()
+        override fun clear() { topic = ""; accessToken = "" }
+    }
+
     private class Phone {
         val prefs = MemoryPrefs()
         val target = Target()
@@ -289,7 +298,8 @@ class RemoteRoundTripTest {
         val https = Https()
         val keys = MemoryKeys()
         val config = MemoryConfig()
-        val settings = DeviceConfigTransfer({ prefs }, telegram, matrix, https, target, keys, { it.startsWith("age1") })
+        val ntfy = Ntfy()
+        val settings = DeviceConfigTransfer({ prefs }, telegram, matrix, https, ntfy, target, keys, { it.startsWith("age1") })
     }
 
     private fun repo(phone: Phone) = RemoteControlRepositoryImpl(phone.config, ntfy, keyring, phone.keys, phone.settings)

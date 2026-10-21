@@ -45,7 +45,7 @@ data class TestStatus(
 )
 
 enum class IntegrationType {
-    TELEGRAM, MATRIX, HTTPS
+    TELEGRAM, MATRIX, HTTPS, NTFY
 }
 
 data class IntegrationField(
@@ -92,6 +92,7 @@ fun IntegrationConfigPopup(
                     IntegrationType.TELEGRAM -> "Telegram Alerts"
                     IntegrationType.MATRIX -> "Matrix Alerts"
                     IntegrationType.HTTPS -> "HTTPS Webhook"
+                    IntegrationType.NTFY -> "ntfy"
                 },
                 style = MaterialTheme.typography.headlineSmall,
                 color = TextPrimary

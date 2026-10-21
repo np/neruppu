@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.LockReset
 import androidx.compose.material.icons.filled.Message
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Photo
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Shield
@@ -132,6 +133,7 @@ fun SettingsScreen(
     telegramViewModel: TelegramSettingsViewModel = hiltViewModel(),
     matrixViewModel: MatrixSettingsViewModel = hiltViewModel(),
     httpsViewModel: HttpsSettingsViewModel = hiltViewModel(),
+    ntfyViewModel: NtfySettingsViewModel = hiltViewModel(),
     deletePasswordViewModel: DeletePasswordSettingsViewModel = hiltViewModel(),
     encryptionViewModel: EncryptionSettingsViewModel = hiltViewModel(),
     remotePairingViewModel: RemotePairingViewModel = hiltViewModel()
@@ -140,6 +142,7 @@ fun SettingsScreen(
     val telegramUiState by telegramViewModel.uiState.collectAsState()
     val matrixUiState by matrixViewModel.uiState.collectAsState()
     val httpsUiState by httpsViewModel.uiState.collectAsState()
+    val ntfyUiState by ntfyViewModel.uiState.collectAsState()
     val deletePasswordUiState by deletePasswordViewModel.uiState.collectAsState()
     val encryptionUiState by encryptionViewModel.uiState.collectAsState()
     val remotePairingUiState by remotePairingViewModel.uiState.collectAsState()
@@ -149,6 +152,7 @@ fun SettingsScreen(
         telegramViewModel.refresh()
         matrixViewModel.refresh()
         httpsViewModel.refresh()
+        ntfyViewModel.refresh()
     }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -156,6 +160,7 @@ fun SettingsScreen(
     var showTelegramConfig by remember { mutableStateOf(false) }
     var showMatrixConfig by remember { mutableStateOf(false) }
     var showHttpsConfig by remember { mutableStateOf(false) }
+    var showNtfyConfig by remember { mutableStateOf(false) }
     var showEncryptionConfig by remember { mutableStateOf(false) }
     var showSetupPasswordDialog by remember { mutableStateOf(false) }
     var showChangePasswordDialog by remember { mutableStateOf(false) }
@@ -414,6 +419,12 @@ fun SettingsScreen(
                 SectionTitle("Integrations")
                 SettingsList {
                     IntegrationSettingRow(
+                        icon = Icons.Default.NotificationsActive,
+                        label = "ntfy (simplest)",
+                        isConfigured = ntfyUiState.isSaved,
+                        onClick = { showNtfyConfig = true }
+                    )
+                    IntegrationSettingRow(
                         icon = Icons.Default.Send,
                         label = "Telegram Alerts",
                         isConfigured = telegramUiState.isSaved,
@@ -571,6 +582,46 @@ fun SettingsScreen(
     )
 
     IntegrationConfigPopup(
+        integrationType = IntegrationType.NTFY,
+        isVisible = showNtfyConfig,
+        onDismiss = { showNtfyConfig = false },
+        uiState = ntfyUiState,
+        actions = ntfyViewModel,
+        fields = listOf(
+            IntegrationField(
+                label = "Server",
+                placeholder = "https://ntfy.sh",
+                value = ntfyUiState.server,
+                onValueChange = ntfyViewModel::onServerChange
+            ),
+            IntegrationField(
+                label = "Topic",
+                placeholder = "neruppu-…",
+                value = ntfyUiState.topic,
+                onValueChange = ntfyViewModel::onTopicChange,
+                supportingText = "Anyone who knows it can read your alerts: keep the random one"
+            ),
+            IntegrationField(
+                label = "Access token (optional)",
+                placeholder = "tk_…",
+                value = ntfyUiState.accessToken,
+                onValueChange = ntfyViewModel::onAccessTokenChange,
+                isPassword = true
+            )
+        ),
+        descriptionText = "Install the ntfy app on the phone that should receive alerts, then Save and Test.",
+        extraContent = {
+            NtfySetupHelp(
+                server = ntfyUiState.server,
+                topic = ntfyUiState.topic,
+                attachCaptures = ntfyUiState.attachCaptures,
+                onNewTopic = ntfyViewModel::newTopic,
+                onAttachCapturesChange = ntfyViewModel::onAttachCapturesChange
+            )
+        }
+    )
+
+    IntegrationConfigPopup(
         integrationType = IntegrationType.HTTPS,
         isVisible = showHttpsConfig,
         onDismiss = { showHttpsConfig = false },
@@ -586,6 +637,39 @@ fun SettingsScreen(
             )
         }
     )
+}
+
+@Composable
+fun NtfySetupHelp(
+    server: String,
+    topic: String,
+    attachCaptures: Boolean,
+    onNewTopic: () -> Unit,
+    onAttachCapturesChange: (Boolean) -> Unit
+) {
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            "In the ntfy app: + → Subscribe to topic → \"$topic\"" +
+                if (server.trimEnd('/') != "https://ntfy.sh") " (use another server: $server)" else "",
+            color = TextSecondary,
+            style = MaterialTheme.typography.bodySmall
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick = { clipboard.setText(androidx.compose.ui.text.AnnotatedString(topic)) }) {
+                Text("Copy topic", color = NeruppuOrange)
+            }
+            TextButton(onClick = onNewTopic) { Text("New random topic", color = NeruppuOrange) }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.material3.Checkbox(checked = attachCaptures, onCheckedChange = onAttachCapturesChange)
+            Text(
+                "Attach captures (encrypted .age files; otherwise they stay on this phone)",
+                color = TextSecondary,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)

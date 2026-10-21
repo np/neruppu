@@ -145,15 +145,5 @@ enum class HttpsPreset(
         headers = "",
         fields = "token=YOUR_APP_TOKEN\nuser=YOUR_USER_KEY\ntitle=Neruppu\nmessage={message}\ntimestamp={timestamp_s}\npriority=1",
         fileField = ""
-    ),
-
-    // https://docs.ntfy.sh/publish/#publish-as-json
-    NTFY(
-        label = "ntfy",
-        url = "https://ntfy.sh/",
-        encoding = HttpsBodyEncoding.JSON,
-        headers = "# Authorization: Bearer YOUR_ACCESS_TOKEN",
-        fields = "topic=YOUR_TOPIC\ntitle=Neruppu\nmessage={message}\npriority=4",
-        fileField = ""
     )
 }

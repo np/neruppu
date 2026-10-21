@@ -29,6 +29,7 @@ import org.havenapp.neruppu.data.storage.MediaStorageRepositoryImpl
 import org.havenapp.neruppu.data.worker.UploadRunScheduler
 import org.havenapp.neruppu.data.worker.MediaUploadWorker
 import org.havenapp.neruppu.domain.di.HttpsTransport
+import org.havenapp.neruppu.domain.di.NtfyTransport
 import org.havenapp.neruppu.domain.di.MatrixTransport
 import org.havenapp.neruppu.domain.di.TelegramTransport
 import org.havenapp.neruppu.domain.model.AlertPayload
@@ -59,6 +60,7 @@ class MediaUploadRepositoryImpl(
     @TelegramTransport private val telegramTransport: AlertTransport,
     @MatrixTransport private val matrixTransport: AlertTransport,
     @HttpsTransport private val httpsTransport: AlertTransport,
+    @NtfyTransport private val ntfyTransport: AlertTransport,
     private val groupingStore: AlertGroupingStore,
     private val runScheduler: UploadRunScheduler
 ) : MediaUploadRepository {
@@ -95,6 +97,7 @@ class MediaUploadRepositoryImpl(
             AlertTarget.TELEGRAM -> telegramTransport
             AlertTarget.MATRIX -> matrixTransport
             AlertTarget.HTTPS -> httpsTransport
+            AlertTarget.NTFY -> ntfyTransport
             AlertTarget.NONE -> return true
         }
         val config = groupingStore.config

@@ -26,6 +26,7 @@ import org.havenapp.neruppu.domain.repository.AlertTargetRepository
 import org.havenapp.neruppu.domain.repository.EncryptionKeyRepository
 import org.havenapp.neruppu.domain.repository.HttpsConfigRepository
 import org.havenapp.neruppu.domain.repository.MatrixConfigRepository
+import org.havenapp.neruppu.domain.repository.NtfyAlertConfigRepository
 import org.havenapp.neruppu.domain.repository.TelegramConfigRepository
 import org.havenapp.neruppu.domain.util.HttpsBodyEncoding
 import javax.inject.Inject
@@ -47,6 +48,7 @@ data class DeviceConfig(
     val telegram: Telegram? = null,
     val matrix: Matrix? = null,
     val https: Https? = null,
+    val ntfy: Ntfy? = null,
     /** Encryption keys of the remote, besides its own pairing key. */
     val ageRecipients: List<String> = emptyList()
 ) {
@@ -55,6 +57,9 @@ data class DeviceConfig(
 
     @Serializable
     data class Matrix(val homeserverUrl: String, val roomId: String, val accessToken: String)
+
+    @Serializable
+    data class Ntfy(val server: String, val topic: String, val accessToken: String, val attachCaptures: Boolean)
 
     @Serializable
     data class Https(
@@ -78,6 +83,7 @@ class DeviceConfigTransfer(
     private val telegram: TelegramConfigRepository,
     private val matrix: MatrixConfigRepository,
     private val https: HttpsConfigRepository,
+    private val ntfy: NtfyAlertConfigRepository,
     private val alertTarget: AlertTargetRepository,
     private val encryptionKeys: EncryptionKeyRepository,
     private val isValidRecipient: (String) -> Boolean
@@ -89,12 +95,13 @@ class DeviceConfigTransfer(
         telegram: TelegramConfigRepository,
         matrix: MatrixConfigRepository,
         https: HttpsConfigRepository,
+        ntfy: NtfyAlertConfigRepository,
         alertTarget: AlertTargetRepository,
         encryptionKeys: EncryptionKeyRepository,
         keyring: AgeKeyring
     ) : this(
         { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE) },
-        telegram, matrix, https, alertTarget, encryptionKeys, keyring::isValidRecipient
+        telegram, matrix, https, ntfy, alertTarget, encryptionKeys, keyring::isValidRecipient
     )
 
     override fun collect(now: Long): DeviceConfig {
@@ -113,6 +120,9 @@ class DeviceConfigTransfer(
             https = if (target == AlertTarget.HTTPS) {
                 DeviceConfig.Https(https.endpointUrl, https.bodyEncoding.name, https.headers, https.fields, https.fileField)
             } else null,
+            ntfy = if (target == AlertTarget.NTFY) {
+                DeviceConfig.Ntfy(ntfy.server, ntfy.topic, ntfy.accessToken, ntfy.attachCaptures)
+            } else null,
             ageRecipients = encryptionKeys.recipients.lines().map { it.trim() }.filter { it.isNotEmpty() }
         )
     }
@@ -128,6 +138,7 @@ class DeviceConfigTransfer(
         telegram.clear()
         matrix.clear()
         https.clear()
+        ntfy.clear()
         val target = when (config.alertTarget) {
             AlertTarget.TELEGRAM.name -> config.telegram?.let {
                 telegram.botToken = it.botToken
@@ -148,6 +159,13 @@ class DeviceConfigTransfer(
                 https.fields = it.fields
                 https.fileField = it.fileField
                 AlertTarget.HTTPS.takeIf { https.isComplete }
+            }
+            AlertTarget.NTFY.name -> config.ntfy?.let {
+                ntfy.server = it.server
+                ntfy.topic = it.topic
+                ntfy.accessToken = it.accessToken
+                ntfy.attachCaptures = it.attachCaptures
+                AlertTarget.NTFY.takeIf { ntfy.isComplete }
             }
             else -> null
         }

@@ -32,6 +32,7 @@ import org.havenapp.neruppu.domain.model.SensorType
 import org.havenapp.neruppu.domain.repository.AlertTargetRepository
 import org.havenapp.neruppu.domain.repository.HttpsConfigRepository
 import org.havenapp.neruppu.domain.repository.MatrixConfigRepository
+import org.havenapp.neruppu.domain.repository.NtfyAlertConfigRepository
 import org.havenapp.neruppu.domain.repository.TelegramConfigRepository
 import org.havenapp.neruppu.domain.transport.AlertTransport
 import org.havenapp.neruppu.domain.util.HttpsBodyEncoding
@@ -55,6 +56,7 @@ class HttpsSettingsViewModel @Inject constructor(
     private val configRepository: HttpsConfigRepository,
     private val telegramConfigRepository: TelegramConfigRepository,
     private val matrixConfigRepository: MatrixConfigRepository,
+    private val ntfyConfigRepository: NtfyAlertConfigRepository,
     private val alertTargetRepository: AlertTargetRepository,
     @HttpsTransport private val alertTransport: AlertTransport
 ) : ViewModel(), IntegrationConfigActions {
@@ -113,6 +115,7 @@ class HttpsSettingsViewModel @Inject constructor(
         if (configRepository.isComplete) {
             telegramConfigRepository.clear()
             matrixConfigRepository.clear()
+            ntfyConfigRepository.clear()
             alertTargetRepository.setActiveTarget(AlertTarget.HTTPS)
         }
     }

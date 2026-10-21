@@ -2,7 +2,8 @@
 
 A fourth alert channel, next to Telegram and Matrix: each alert is one
 `POST` to an HTTPS URL, built from a request template you define, so it can
-talk directly to services such as Pushover or ntfy, or to your own server.
+talk directly to services such as Pushover, or to your own server. For ntfy,
+prefer the dedicated ntfy channel.
 
 Settings → Integrations → **HTTPS Webhook**. Like the other channels it is
 exclusive: saving it clears Telegram and Matrix, and vice versa. Everything is
@@ -63,9 +64,9 @@ an endpoint may receive the same alert more than once.
 Pushover attachments must be images, and an `.age` blob is not one — the
 notification tells you *when*; the capture stays encrypted on the phone.
 
-**ntfy** (`https://ntfy.sh/`, JSON): fields `topic`, `title`,
-`message={message}`, `priority=4`. For a protected topic or your own server,
-uncomment the `Authorization` header and change the URL.
+**ntfy**: use the dedicated *ntfy* channel instead (Settings → Integrations),
+which only asks for a server and a random topic. The former JSON preset could
+not work: JSON values are sent as strings and ntfy rejects `"priority":"4"`.
 
 **Neruppu receiver** (multipart): `kind`, `timestamp={timestamp_ms}`,
 `message`, capture field `file`, bearer token header. Matches

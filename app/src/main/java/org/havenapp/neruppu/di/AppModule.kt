@@ -109,6 +109,7 @@ object AppModule {
         telegramTransport: TelegramAlertTransport,
         matrixTransport: MatrixAlertTransport,
         httpsTransport: HttpsAlertTransport,
+        ntfyTransport: org.havenapp.neruppu.data.ntfy.NtfyAlertTransport,
         groupingStore: SharedPrefsAlertGroupingStore
     ): MediaUploadRepository {
         return MediaUploadRepositoryImpl(
@@ -118,6 +119,7 @@ object AppModule {
             telegramTransport = telegramTransport,
             matrixTransport = matrixTransport,
             httpsTransport = httpsTransport,
+            ntfyTransport = ntfyTransport,
             groupingStore = groupingStore,
             runScheduler = UploadRunScheduler { delayMs -> MediaUploadWorker.scheduleRun(context, delayMs) }
         )

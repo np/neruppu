@@ -427,6 +427,7 @@ fun EventItem(event: Event) {
                             "TELEGRAM" -> "Uploaded to Telegram"
                             "MATRIX" -> "Uploaded to Matrix"
                             "HTTPS" -> "Uploaded to HTTPS webhook"
+                            "NTFY" -> "Sent to ntfy"
                             else -> "Uploaded"
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {

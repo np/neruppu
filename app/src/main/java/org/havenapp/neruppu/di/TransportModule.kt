@@ -22,6 +22,10 @@ import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import org.havenapp.neruppu.domain.di.HttpsTransport
+import org.havenapp.neruppu.domain.di.NtfyTransport
+import org.havenapp.neruppu.data.ntfy.NtfyAlertConfigStore
+import org.havenapp.neruppu.data.ntfy.NtfyAlertTransport
+import org.havenapp.neruppu.domain.repository.NtfyAlertConfigRepository
 import org.havenapp.neruppu.domain.di.MatrixTransport
 import org.havenapp.neruppu.domain.di.TelegramTransport
 import org.havenapp.neruppu.data.crypto.AgeRecipientStore
@@ -74,6 +78,19 @@ abstract class TransportModule {
     @HttpsTransport
     abstract fun bindHttpsTransport(
         impl: HttpsAlertTransport
+    ): AlertTransport
+
+    @Binds
+    @Singleton
+    abstract fun bindNtfyAlertConfig(
+        impl: NtfyAlertConfigStore
+    ): NtfyAlertConfigRepository
+
+    @Binds
+    @Singleton
+    @NtfyTransport
+    abstract fun bindNtfyAlertTransport(
+        impl: NtfyAlertTransport
     ): AlertTransport
 
     @Binds

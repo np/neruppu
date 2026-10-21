@@ -74,6 +74,7 @@ class MediaUploadRepositoryTest {
             telegramTransport = telegramTransport,
             matrixTransport = matrixTransport,
             httpsTransport = httpsTransport,
+            ntfyTransport = mockk(relaxed = true),
             groupingStore = FakeGroupingStore().also { groupingStore = it },
             runScheduler = UploadRunScheduler { scheduledDelays += it }
         )

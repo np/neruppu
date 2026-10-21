@@ -30,6 +30,7 @@ import org.havenapp.neruppu.domain.repository.AlertTargetRepository
 import org.havenapp.neruppu.domain.repository.DeletePasswordRepository
 import org.havenapp.neruppu.domain.repository.EncryptionKeyRepository
 import org.havenapp.neruppu.domain.repository.HttpsConfigRepository
+import org.havenapp.neruppu.domain.repository.NtfyAlertConfigRepository
 import org.havenapp.neruppu.domain.repository.MatrixConfigRepository
 import org.havenapp.neruppu.domain.repository.TelegramConfigRepository
 import org.havenapp.neruppu.domain.transport.AlertTransport
@@ -65,6 +66,7 @@ class SettingsScreenTest {
                         configRepository = FakeTelegramConfigRepository(),
                         matrixConfigRepository = FakeMatrixConfigRepository(),
                         httpsConfigRepository = FakeHttpsConfigRepository(),
+                        ntfyConfigRepository = FakeNtfyConfigRepository(),
                         alertTargetRepository = FakeAlertTargetRepository(),
                         alertTransport = FakeAlertTransport()
                     ),
@@ -72,6 +74,7 @@ class SettingsScreenTest {
                         configRepository = FakeMatrixConfigRepository(),
                         telegramConfigRepository = FakeTelegramConfigRepository(),
                         httpsConfigRepository = FakeHttpsConfigRepository(),
+                        ntfyConfigRepository = FakeNtfyConfigRepository(),
                         alertTargetRepository = FakeAlertTargetRepository(),
                         alertTransport = FakeAlertTransport()
                     ),
@@ -79,6 +82,15 @@ class SettingsScreenTest {
                         configRepository = FakeHttpsConfigRepository(),
                         telegramConfigRepository = FakeTelegramConfigRepository(),
                         matrixConfigRepository = FakeMatrixConfigRepository(),
+                        ntfyConfigRepository = FakeNtfyConfigRepository(),
+                        alertTargetRepository = FakeAlertTargetRepository(),
+                        alertTransport = FakeAlertTransport()
+                    ),
+                    ntfyViewModel = NtfySettingsViewModel(
+                        configRepository = FakeNtfyConfigRepository(),
+                        telegramConfigRepository = FakeTelegramConfigRepository(),
+                        matrixConfigRepository = FakeMatrixConfigRepository(),
+                        httpsConfigRepository = FakeHttpsConfigRepository(),
                         alertTargetRepository = FakeAlertTargetRepository(),
                         alertTransport = FakeAlertTransport()
                     ),
@@ -118,6 +130,7 @@ class SettingsScreenTest {
                         configRepository = FakeTelegramConfigRepository(),
                         matrixConfigRepository = FakeMatrixConfigRepository(),
                         httpsConfigRepository = FakeHttpsConfigRepository(),
+                        ntfyConfigRepository = FakeNtfyConfigRepository(),
                         alertTargetRepository = FakeAlertTargetRepository(),
                         alertTransport = FakeAlertTransport()
                     ),
@@ -125,6 +138,7 @@ class SettingsScreenTest {
                         configRepository = FakeMatrixConfigRepository(),
                         telegramConfigRepository = FakeTelegramConfigRepository(),
                         httpsConfigRepository = FakeHttpsConfigRepository(),
+                        ntfyConfigRepository = FakeNtfyConfigRepository(),
                         alertTargetRepository = FakeAlertTargetRepository(),
                         alertTransport = FakeAlertTransport()
                     ),
@@ -132,6 +146,15 @@ class SettingsScreenTest {
                         configRepository = FakeHttpsConfigRepository(),
                         telegramConfigRepository = FakeTelegramConfigRepository(),
                         matrixConfigRepository = FakeMatrixConfigRepository(),
+                        ntfyConfigRepository = FakeNtfyConfigRepository(),
+                        alertTargetRepository = FakeAlertTargetRepository(),
+                        alertTransport = FakeAlertTransport()
+                    ),
+                    ntfyViewModel = NtfySettingsViewModel(
+                        configRepository = FakeNtfyConfigRepository(),
+                        telegramConfigRepository = FakeTelegramConfigRepository(),
+                        matrixConfigRepository = FakeMatrixConfigRepository(),
+                        httpsConfigRepository = FakeHttpsConfigRepository(),
                         alertTargetRepository = FakeAlertTargetRepository(),
                         alertTransport = FakeAlertTransport()
                     ),
@@ -147,6 +170,15 @@ class SettingsScreenTest {
 
         composeTestRule.onNodeWithText("Motion detection").assertIsDisplayed()
     }
+}
+
+private class FakeNtfyConfigRepository : NtfyAlertConfigRepository {
+    override var server: String = NtfyAlertConfigRepository.DEFAULT_SERVER
+    override var topic: String = ""
+    override var accessToken: String = ""
+    override var attachCaptures: Boolean = true
+    override val isComplete: Boolean = false
+    override fun clear() {}
 }
 
 private class FakeHttpsConfigRepository : HttpsConfigRepository {

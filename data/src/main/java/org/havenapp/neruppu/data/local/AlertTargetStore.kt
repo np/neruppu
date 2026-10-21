@@ -52,6 +52,7 @@ class AlertTargetStore @Inject constructor(
                 "TELEGRAM" -> AlertTarget.TELEGRAM
                 "MATRIX" -> AlertTarget.MATRIX
                 "HTTPS" -> AlertTarget.HTTPS
+                "NTFY" -> AlertTarget.NTFY
                 else -> AlertTarget.NONE
             }
         }
