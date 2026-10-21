@@ -384,9 +384,13 @@ fun RemoteControlScreen(viewModel: RemoteControlViewModel) {
                 (unlockError ?: state.error)?.let { Text(it, color = NeruppuRed, style = MaterialTheme.typography.bodySmall) }
             }
         }
-        return
+    } else {
+        UnlockedRemote(state, viewModel)
     }
+}
 
+@Composable
+private fun UnlockedRemote(state: RemoteControlUiState, viewModel: RemoteControlViewModel) {
     Column(Modifier.fillMaxSize().background(BackgroundPrimary)) {
         ScreenHeader(title = "Remote")
         Column(
@@ -479,32 +483,34 @@ private fun StatusCard(status: RemoteStatus?, at: Long?) {
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
+        // No early return: returning from an inline composable lambda breaks
+        // the composition's groups with this Compose compiler (crash on recompose).
         if (status == null) {
             Text("Waiting for the guarded phone…", color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
             Text("It answers only while guarding.", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
-            return@Column
+        } else {
+            val (label, color) = when {
+                status.armed -> "Guarding" to NeruppuGreen
+                status.monitoring -> "Arming (${status.armingRemainingSeconds} s left)" to NeruppuAmber
+                else -> "Idle" to TextSecondary
+            }
+            Text(label, color = color, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+            status.guardingSince?.let {
+                Text("Since ${formatTime(it)}", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+            }
+            val battery = if (status.batteryPercent >= 0) "${status.batteryPercent} %" else "?"
+            Text(
+                "Battery $battery" + if (status.pluggedIn) " · plugged in" else " · on battery",
+                color = if (!status.pluggedIn && status.batteryPercent in 0..20) NeruppuRed else TextSecondary,
+                style = MaterialTheme.typography.bodySmall
+            )
+            Text(
+                status.lastEventAt?.let { "Last event: ${status.lastEventType ?: "?"} at ${formatTime(it)}" }
+                    ?: "No event since start",
+                color = TextSecondary,
+                style = MaterialTheme.typography.bodySmall
+            )
         }
-        val (label, color) = when {
-            status.armed -> "Guarding" to NeruppuGreen
-            status.monitoring -> "Arming (${status.armingRemainingSeconds} s left)" to NeruppuAmber
-            else -> "Idle" to TextSecondary
-        }
-        Text(label, color = color, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
-        status.guardingSince?.let {
-            Text("Since ${formatTime(it)}", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
-        }
-        val battery = if (status.batteryPercent >= 0) "${status.batteryPercent} %" else "?"
-        Text(
-            "Battery $battery" + if (status.pluggedIn) " · plugged in" else " · on battery",
-            color = if (!status.pluggedIn && status.batteryPercent in 0..20) NeruppuRed else TextSecondary,
-            style = MaterialTheme.typography.bodySmall
-        )
-        Text(
-            status.lastEventAt?.let { "Last event: ${status.lastEventType ?: "?"} at ${formatTime(it)}" }
-                ?: "No event since start",
-            color = TextSecondary,
-            style = MaterialTheme.typography.bodySmall
-        )
         at?.let { Text("Updated ${formatTime(it)}", color = TextSecondary, style = MaterialTheme.typography.labelSmall) }
     }
 }

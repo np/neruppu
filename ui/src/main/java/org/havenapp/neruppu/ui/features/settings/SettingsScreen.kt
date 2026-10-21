@@ -602,11 +602,12 @@ fun SettingsScreen(
                 supportingText = "Anyone who knows it can read your alerts: keep the random one"
             ),
             IntegrationField(
-                label = "Access token (optional)",
+                label = "Access token — leave empty unless your topic is reserved",
                 placeholder = "tk_…",
                 value = ntfyUiState.accessToken,
                 onValueChange = ntfyViewModel::onAccessTokenChange,
-                isPassword = true
+                isPassword = true,
+                supportingText = "Only needed if you reserved this topic with an ntfy.sh account, or if your own server requires login. Create the token in your ntfy account (tk_…)."
             )
         ),
         descriptionText = "Install the ntfy app on the phone that should receive alerts, then Save and Test.",
