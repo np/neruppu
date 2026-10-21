@@ -54,7 +54,12 @@ import org.havenapp.neruppu.data.local.SharedPrefsAlertGroupingStore
 import org.havenapp.neruppu.service.MonitoringService
 import org.havenapp.neruppu.domain.model.AlertTarget
 import org.havenapp.neruppu.domain.repository.AlertTargetRepository
+import androidx.compose.material.icons.filled.Phone
+import org.havenapp.neruppu.domain.remote.RemoteRole
 import org.havenapp.neruppu.ui.features.dashboard.DashboardScreen
+import org.havenapp.neruppu.ui.features.remote.RemoteControlScreen
+import org.havenapp.neruppu.ui.features.remote.RemoteControlViewModel
+import org.havenapp.neruppu.ui.features.remote.RemotePairingViewModel
 import org.havenapp.neruppu.ui.features.dashboard.StartWarningsDialog
 import javax.inject.Inject
 import org.havenapp.neruppu.ui.features.logs.LogsScreen
@@ -195,6 +200,10 @@ class MainActivity : ComponentActivity() {
         // Same activity-scoped instance that SettingsScreen edits, so the
         // dashboard reacts as soon as a key is saved.
         val encryptionViewModel: EncryptionSettingsViewModel = hiltViewModel()
+        val remotePairingViewModel: RemotePairingViewModel = hiltViewModel()
+        val remotePairing by remotePairingViewModel.uiState.collectAsState()
+        // A remote-control phone holds the age identity: it must never guard.
+        val isRemote = remotePairing.role == RemoteRole.CONTROLLER
         val encryptionUiState by encryptionViewModel.uiState.collectAsState()
 
         val context = LocalContext.current
@@ -237,8 +246,13 @@ class MainActivity : ComponentActivity() {
                     NavigationBarItem(
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0 },
-                        icon = { Icon(Icons.Default.Home, contentDescription = null) },
-                        label = { Text(stringResource(R.string.nav_home), style = MaterialTheme.typography.labelMedium) },
+                        icon = { Icon(if (isRemote) Icons.Default.Phone else Icons.Default.Home, contentDescription = null) },
+                        label = {
+                            Text(
+                                if (isRemote) "Remote" else stringResource(R.string.nav_home),
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        },
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = TextPrimary,
                             selectedTextColor = TextPrimary,
@@ -278,7 +292,10 @@ class MainActivity : ComponentActivity() {
         ) { paddingValues ->
             Box(modifier = Modifier.padding(paddingValues)) {
                 when (selectedTab) {
-                    0 -> {
+                    0 -> if (isRemote) {
+                        val remoteControlViewModel: RemoteControlViewModel = hiltViewModel()
+                        RemoteControlScreen(remoteControlViewModel)
+                    } else {
                         val service = monitoringService.value
                         if (service != null) {
                             val isMonitoring by service.isMonitoring.collectAsState()
@@ -417,7 +434,8 @@ class MainActivity : ComponentActivity() {
                                 alertHourlyCap = it
                                 prefs.edit().putInt(SharedPrefsAlertGroupingStore.PREF_HOURLY_CAP, it).apply()
                             },
-                            encryptionViewModel = encryptionViewModel
+                            encryptionViewModel = encryptionViewModel,
+                            remotePairingViewModel = remotePairingViewModel
                         )
                     }
                 }

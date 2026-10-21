@@ -67,6 +67,9 @@ dependencies {
     implementation(libs.androidx.material.icons.extended)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.coil.compose)
+    // QR codes for remote-control pairing
+    implementation(libs.zxing.android.embedded)
+    implementation(libs.zxing.core)
     implementation(libs.androidx.camera.core)
     implementation(libs.androidx.camera.camera2)
     implementation(libs.androidx.camera.lifecycle)

@@ -21,9 +21,13 @@ leakCanary = "2.14"
 ktor = "2.3.7"
 securityCrypto = "1.1.0-alpha06"
 neruppuAge = "1.0.0"
+zxingEmbedded = "4.3.0"
+zxingCore = "3.5.3"
 serialization = "1.6.3"
 
 [libraries]
+zxing-android-embedded = { group = "com.journeyapps", name = "zxing-android-embedded", version.ref = "zxingEmbedded" }
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxingCore" }
 neruppu-age = { group = "org.havenapp.neruppu", name = "neruppu-age", version.ref = "neruppuAge" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "splashScreen" }

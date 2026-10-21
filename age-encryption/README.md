@@ -66,8 +66,11 @@ format de trames — ce qui l'oblige à distribuer un outil compagnon. Ici
 `age -d` rend directement un JPEG ouvrable, avec n'importe quelle
 implémentation (Go, rage, pyrage, une page WASM).
 
-**Pas d'API de déchiffrement sur l'appareil.** Le module n'expose que
-`EncryptBytes`, `NewWriterToFd` et `IsValidRecipient`. Absence délibérée.
+**Pas de clé privée sur l'appareil surveillé.** Côté garde, seuls
+`EncryptBytes`, `NewWriterToFd` et `IsValidRecipient` servent. Depuis la
+télécommande, `remote.go` ajoute `GenerateIdentity`, `RecipientOf` et
+`DecryptBytes`, utilisés uniquement par le téléphone télécommande, qui détient
+l'identité ; le téléphone de garde n'en génère ni n'en stocke jamais.
 
 **Pas de repli silencieux.** `AgeRecipientStore` ne retombe pas sur des
 préférences en clair si le Keystore échoue, et la surveillance refuse de

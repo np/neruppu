@@ -1,11 +1,13 @@
 // Package neruppuage is a thin gomobile binding around filippo.io/age.
+// (Decryption exists only for the remote-control phone: see remote.go.)
 //
 // Design notes (differ deliberately from Cryptocam's shim):
 //   - Output is a PLAIN age file: no magic number, no recipient fingerprints,
 //     no custom container. `age -d -i key.txt capture.age > capture.jpg` must
 //     yield a directly usable file, with any age implementation.
-//   - Only the public key ever reaches the device. There is no decryption API
-//     here on purpose: a seized phone cannot read what it produced.
+//   - Only the public key ever reaches the guarded device: a seized phone
+//     cannot read what it produced. The decryption functions in remote.go are
+//     for the remote-control phone, which holds the identity.
 //
 // Build the AAR with ./build-aar.sh (see BUILD.md).
 package neruppuage

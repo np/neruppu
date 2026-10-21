@@ -73,6 +73,7 @@ class MonitoringServiceTest {
     private val cameraManager = mockk<CameraManager>(relaxed = true)
     private val encryptionKeyRepository = mockk<EncryptionKeyRepository>(relaxed = true)
     private val alertTargetRepository = mockk<AlertTargetRepository>(relaxed = true)
+    private val remoteGuard = mockk<org.havenapp.neruppu.data.remote.RemoteGuard>(relaxed = true)
 
     private lateinit var service: MonitoringService
 
@@ -97,7 +98,7 @@ class MonitoringServiceTest {
         controller.create()
         
         // Manual injection AFTER create() to overwrite Hilt's real objects
-        val fieldNames = listOf("cameraManager", "sensorRepository", "handleSensorEventUseCase", "attachAudioToEventUseCase", "mediaUploadRepository", "encryptionKeyRepository", "alertTargetRepository", "serviceScope", "savePhotosPref")
+        val fieldNames = listOf("cameraManager", "sensorRepository", "handleSensorEventUseCase", "attachAudioToEventUseCase", "mediaUploadRepository", "encryptionKeyRepository", "alertTargetRepository", "remoteGuard", "serviceScope", "savePhotosPref")
         fieldNames.forEach { name ->
             val field = MonitoringService::class.java.getDeclaredField(name)
             field.isAccessible = true
@@ -109,6 +110,7 @@ class MonitoringServiceTest {
                 "mediaUploadRepository" -> field.set(service, mediaUploadRepository)
                 "encryptionKeyRepository" -> field.set(service, encryptionKeyRepository)
                 "alertTargetRepository" -> field.set(service, alertTargetRepository)
+                "remoteGuard" -> field.set(service, remoteGuard)
                 "serviceScope" -> field.set(service, CoroutineScope(testDispatcher + SupervisorJob()))
                 "savePhotosPref" -> field.set(service, false)
             }

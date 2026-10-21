@@ -72,6 +72,13 @@ class EncryptionSettingsViewModel @Inject constructor(
         _uiState.update { EncryptionUiState() }
     }
 
+    /** Reloads after the keys changed elsewhere (e.g. remote-control pairing). */
+    fun refresh() {
+        _uiState.update {
+            EncryptionUiState(recipientsInput = keyRepository.recipients, isConfigured = keyRepository.isConfigured)
+        }
+    }
+
     /** Discards unsaved edits. */
     fun reset() {
         _uiState.update {

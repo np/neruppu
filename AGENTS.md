@@ -35,6 +35,8 @@ Remote alerts are sent via the **Matrix Protocol** using a lightweight Ktor-base
 
 *   **Delivery path**: while guarding, `MonitoringService.deliverAlerts()` calls `uploadPendingEvents()` directly right after each event (a foreground service keeps network access in Doze), and a 60 s tick sends due summaries/retries. `MediaUploadWorker` (KEEP, linear 1-min backoff) is only the fallback when direct delivery fails or the service is not running. Event notifications are posted directly by the service, not via WorkManager. Do not route time-critical alerts through WorkManager: Doze defers jobs to maintenance windows hours apart.
 
+*   **Remote control (ntfy)**: a second phone paired by QR code (Settings → Remote control) can request the guarded phone's status and a photo on demand; no remote disarm, no live video. Commands/answers are AES-256-GCM with a pairing key over random ntfy topics (`<topic>-c` / `<topic>-r`); photos are age-encrypted ntfy attachments that only the remote can open (it holds the age identity; the guarded phone adds the remote's public key to its encryption keys). The guarded phone listens only while guarding (`MonitoringService` runs `RemoteGuard`). A remote phone never guards: its Home tab becomes the Remote screen. See `docs/remote-control.md`.
+
 ## 5. Security & Privacy Features
 *   **Offline-First**: All logs and media are stored locally in the `Downloads/Neruppu` folder (via MediaStore) and an internal Room database.
 *   **Media Cleanup**: When clearing logs, users can optionally trigger a physical file deletion for all associated media.

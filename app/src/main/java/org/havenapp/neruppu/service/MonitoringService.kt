@@ -23,8 +23,10 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.content.pm.ServiceInfo
+import android.os.BatteryManager
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
@@ -50,6 +52,9 @@ import org.havenapp.neruppu.domain.model.SensorType
 import org.havenapp.neruppu.domain.model.SensorEvent
 import org.havenapp.neruppu.domain.model.AlertTarget
 import org.havenapp.neruppu.domain.repository.AlertTargetRepository
+import org.havenapp.neruppu.data.remote.GuardDevice
+import org.havenapp.neruppu.data.remote.RemoteGuard
+import org.havenapp.neruppu.domain.remote.RemoteStatus
 import org.havenapp.neruppu.domain.repository.EncryptionKeyRepository
 import org.havenapp.neruppu.domain.repository.MediaUploadRepository
 import org.havenapp.neruppu.domain.repository.SensorRepository
@@ -83,6 +88,9 @@ class MonitoringService : LifecycleService() {
 
     @Inject
     lateinit var encryptionKeyRepository: EncryptionKeyRepository
+
+    @Inject
+    lateinit var remoteGuard: RemoteGuard
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var wakeLockRefreshJob: Job? = null
@@ -118,6 +126,9 @@ class MonitoringService : LifecycleService() {
     val armedAtElapsed: StateFlow<Long> = _armedAtElapsed
     private var armingJob: Job? = null
     private var deliveryTickJob: Job? = null
+    private var remoteJob: Job? = null
+    @Volatile private var lastEventAt: Long? = null
+    @Volatile private var lastEventType: SensorType? = null
 
     /** True once monitoring is on and the exit delay has elapsed. */
     private fun isArmed(): Boolean =
@@ -362,12 +373,15 @@ class MonitoringService : LifecycleService() {
             startWakeLockIfNeeded()
             startArming()
             startDeliveryTicks()
+            startRemoteGuard()
         } else {
             Log.d("MonitoringService", "Monitoring DEACTIVATED")
             armingJob?.cancel()
             armingJob = null
             deliveryTickJob?.cancel()
             deliveryTickJob = null
+            remoteJob?.cancel()
+            remoteJob = null
             _armedAtElapsed.value = 0L
             _lastGuardedTime.value = now
             getSharedPreferences("neruppu_prefs", MODE_PRIVATE)
@@ -611,6 +625,8 @@ class MonitoringService : LifecycleService() {
             Log.d("MonitoringService", "Event ignored, not armed (exit delay or idle): $type")
             return -1
         }
+        lastEventAt = System.currentTimeMillis()
+        lastEventType = type
         val now = System.currentTimeMillis()
         val lastTime = lastEventTime[type] ?: 0L
         
@@ -707,6 +723,44 @@ class MonitoringService : LifecycleService() {
                 }
             }
         }
+    }
+
+    /** Answers the paired remote control (status, photo) while guarding. */
+    private fun startRemoteGuard() {
+        remoteJob?.cancel()
+        remoteJob = serviceScope.launch {
+            try {
+                remoteGuard.run(guardDevice)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w("MonitoringService", "Remote control stopped", e)
+            }
+        }
+    }
+
+    private val guardDevice = object : GuardDevice {
+        override suspend fun status(): RemoteStatus {
+            val battery = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            val level = battery?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+            val scale = battery?.getIntExtra(BatteryManager.EXTRA_SCALE, 100) ?: 100
+            val remainingMs = _armedAtElapsed.value - SystemClock.elapsedRealtime()
+            return RemoteStatus(
+                monitoring = _isMonitoring.value,
+                armed = isArmed(),
+                armingRemainingSeconds = if (_isMonitoring.value && remainingMs > 0) ((remainingMs + 999) / 1000).toInt() else 0,
+                guardingSince = _sessionStartTime.value.takeIf { it > 0 },
+                batteryPercent = if (level >= 0 && scale > 0) level * 100 / scale else -1,
+                pluggedIn = (battery?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0,
+                lastEventAt = lastEventAt,
+                lastEventType = lastEventType?.name
+            )
+        }
+
+        // Only while guarding: the camera is bound then. The photo is not an
+        // event and is not stored; it leaves the phone age-encrypted.
+        override suspend fun takePhoto(): ByteArray? =
+            if (_isMonitoring.value) cameraManager.capturePhotoBytes() else null
     }
 
     private fun postEventNotification(type: SensorType, description: String) {
@@ -820,6 +874,7 @@ class MonitoringService : LifecycleService() {
         heartbeatJob?.cancel()
         armingJob?.cancel()
         deliveryTickJob?.cancel()
+        remoteJob?.cancel()
         sensorsJob?.cancel()
         uiSensorsJob?.cancel()
         serviceScope.cancel()

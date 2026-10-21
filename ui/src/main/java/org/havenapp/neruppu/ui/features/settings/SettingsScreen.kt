@@ -103,6 +103,8 @@ import org.havenapp.neruppu.core.ui.theme.NeruppuTheme
 import org.havenapp.neruppu.core.ui.theme.TextPrimary
 import org.havenapp.neruppu.core.ui.theme.TextSecondary
 import org.havenapp.neruppu.ui.components.ScreenHeader
+import org.havenapp.neruppu.ui.features.remote.RemotePairingRow
+import org.havenapp.neruppu.ui.features.remote.RemotePairingViewModel
 import kotlin.math.roundToInt
 
 @Composable
@@ -131,7 +133,8 @@ fun SettingsScreen(
     matrixViewModel: MatrixSettingsViewModel = hiltViewModel(),
     httpsViewModel: HttpsSettingsViewModel = hiltViewModel(),
     deletePasswordViewModel: DeletePasswordSettingsViewModel = hiltViewModel(),
-    encryptionViewModel: EncryptionSettingsViewModel = hiltViewModel()
+    encryptionViewModel: EncryptionSettingsViewModel = hiltViewModel(),
+    remotePairingViewModel: RemotePairingViewModel = hiltViewModel()
 ) {
 
     val telegramUiState by telegramViewModel.uiState.collectAsState()
@@ -139,6 +142,9 @@ fun SettingsScreen(
     val httpsUiState by httpsViewModel.uiState.collectAsState()
     val deletePasswordUiState by deletePasswordViewModel.uiState.collectAsState()
     val encryptionUiState by encryptionViewModel.uiState.collectAsState()
+    val remotePairingUiState by remotePairingViewModel.uiState.collectAsState()
+    // Pairing as guarded phone adds the remote's age key to the encryption keys.
+    LaunchedEffect(remotePairingUiState.role) { encryptionViewModel.refresh() }
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -387,6 +393,15 @@ fun SettingsScreen(
                     onSetClick = { showSetupPasswordDialog = true },
                     onChangeClick = { showChangePasswordDialog = true },
                     onRemoveClick = { showRemovePasswordDialog = true }
+                )
+
+                SectionTitle("Remote control")
+                RemotePairingRow(
+                    state = remotePairingUiState,
+                    onBecomeRemote = remotePairingViewModel::becomeRemote,
+                    onPairAsGuard = remotePairingViewModel::pairAsGuard,
+                    onUnpair = remotePairingViewModel::unpair,
+                    onClearError = remotePairingViewModel::clearError
                 )
 
                 SectionTitle("Integrations")

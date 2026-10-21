@@ -37,8 +37,9 @@ class NoRecipientConfiguredException :
  * plaintext header, no recipient fingerprints — unlike Cryptocam, which needs
  * its companion tool because its format wraps a container for video framing.
  *
- * There is no decryption counterpart on purpose. The private key never touches
- * the device, so a seized phone cannot read what it recorded.
+ * There is no decryption here on purpose. The private key never touches the
+ * guarded device, so a seized phone cannot read what it recorded (only the
+ * paired remote-control phone can, see data/remote).
  */
 @Singleton
 class AgeEncryptor @Inject constructor(
