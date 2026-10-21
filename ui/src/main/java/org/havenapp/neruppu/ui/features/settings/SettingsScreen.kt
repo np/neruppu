@@ -407,6 +407,7 @@ fun SettingsScreen(
                     onPairAsGuard = remotePairingViewModel::pairAsGuard,
                     onUnpair = remotePairingViewModel::unpair,
                     onSendSettings = remotePairingViewModel::sendSettings,
+                    onUnlocked = remotePairingViewModel::onUnlocked,
                     onClearError = remotePairingViewModel::clearError
                 )
 

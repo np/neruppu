@@ -19,6 +19,15 @@ package org.havenapp.neruppu.domain.remote
 
 import kotlinx.coroutines.flow.Flow
 
+/**
+ * The remote's secrets need a recent biometric or device-credential unlock
+ * (they are sealed with an auth-bound Keystore key). Unlock, then retry.
+ */
+class RemoteLockedException : Exception("Unlock the remote control first")
+
+/** The remote's keys are gone (screen lock removed or reset): pair again. */
+class RemoteKeysLostException : Exception("The remote's keys were invalidated (screen lock changed). Unpair and pair again.")
+
 /** A phone is either guarded, the remote control of a guarded phone, or neither. */
 enum class RemoteRole { NONE, GUARD, CONTROLLER }
 
@@ -49,6 +58,9 @@ sealed class RemoteUpdate {
  */
 interface RemoteControlRepository {
     val role: RemoteRole
+
+    /** Controller: whether its secrets are readable now (unlocked recently). */
+    fun isUnlocked(): Boolean
 
     /** Controller: creates keys and a channel; returns the pairing code to show as QR. */
     fun createControllerPairing(server: String): String

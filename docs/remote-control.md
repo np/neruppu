@@ -48,6 +48,24 @@ pairing. A phone paired as remote refuses to become a guarded phone, and its
 Home tab is replaced by the Remote screen: a phone holding an age private key
 never guards. Unpair in the same dialog on each phone.
 
+## Biometric lock (remote phone)
+
+The remote's secrets (age identity, channel key, topic) are sealed with an
+AES-256-GCM key in the Android Keystore that requires **strong biometrics
+or the device PIN/pattern/password within the last 5 minutes**
+(`data/remote/SecretVault.kt`). Without that unlock even the app cannot read
+them, so someone holding the unlocked phone, or a copy of its storage, gets
+neither the photos nor the commands. The Remote tab asks on opening, hides
+everything and locks again when the app leaves the foreground; showing the
+pairing code, creating it and sending settings ask too.
+
+- Becoming a remote requires a secure lock screen.
+- Removing or resetting the screen lock can invalidate the key: the remote
+  then has to be unpaired and paired again.
+- A remote paired before this lock is migrated at its first unlock.
+- The guarded phone is not locked: it must answer unattended, and it holds
+  no private key.
+
 ## Protocol
 
 - Commands go to `<topic>-c`, answers to `<topic>-r`, pairing settings to

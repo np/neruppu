@@ -42,6 +42,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SettingsRemote
 import androidx.compose.material3.AlertDialog
@@ -112,7 +113,8 @@ fun RemotePairingRow(
     onPairAsGuard: (code: String) -> Unit,
     onUnpair: () -> Unit,
     onClearError: () -> Unit,
-    onSendSettings: () -> Unit = {}
+    onSendSettings: () -> Unit = {},
+    onUnlocked: () -> Unit = {}
 ) {
     var open by remember { mutableStateOf(false) }
     Row(
@@ -153,6 +155,7 @@ fun RemotePairingRow(
             onPairAsGuard = onPairAsGuard,
             onUnpair = onUnpair,
             onSendSettings = onSendSettings,
+            onUnlocked = onUnlocked,
             onDismiss = {
                 open = false
                 onClearError()
@@ -168,8 +171,15 @@ private fun RemotePairingDialog(
     onPairAsGuard: (String) -> Unit,
     onUnpair: () -> Unit,
     onSendSettings: () -> Unit,
+    onUnlocked: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val unlock = rememberRemoteUnlock()
+    var unlockError by remember { mutableStateOf<String?>(null) }
+    val withUnlock: (() -> Unit) -> Unit = { action ->
+        unlockError = null
+        unlock.run(onError = { unlockError = it }) { action() }
+    }
     var server by remember { mutableStateOf(DEFAULT_NTFY_SERVER) }
     var pasted by remember { mutableStateOf("") }
     val clipboard = LocalClipboardManager.current
@@ -205,7 +215,8 @@ private fun RemotePairingDialog(
                             colors = fieldColors()
                         )
                         Button(
-                            onClick = { onBecomeRemote(server) },
+                            // The remote's keys are sealed with an auth-bound key: unlock first.
+                            onClick = { withUnlock { onBecomeRemote(server) } },
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = NeruppuOrange)
                         ) { Text("Use this phone as the remote") }
@@ -245,6 +256,13 @@ private fun RemotePairingDialog(
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )
+                        if (state.locked) {
+                            Button(
+                                onClick = { withUnlock(onUnlocked) },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = NeruppuOrange)
+                            ) { Text("Unlock to show the code") }
+                        }
                         state.pairingCode?.let { code ->
                             Image(
                                 bitmap = remember(code) { qrImage(code) },
@@ -262,7 +280,7 @@ private fun RemotePairingDialog(
                             color = TextSecondary
                         )
                         OutlinedButton(
-                            onClick = onSendSettings,
+                            onClick = { withUnlock(onSendSettings) },
                             enabled = !state.busy,
                             modifier = Modifier.fillMaxWidth()
                         ) { Text("Send settings again") }
@@ -293,6 +311,7 @@ private fun RemotePairingDialog(
 
                 if (state.busy) CircularProgressIndicator(Modifier.size(20.dp), color = NeruppuOrange, strokeWidth = 2.dp)
                 state.info?.let { Text(it, color = NeruppuGreen, style = MaterialTheme.typography.bodySmall) }
+                unlockError?.let { Text(it, color = NeruppuRed, style = MaterialTheme.typography.bodySmall) }
                 state.error?.let { Text(it, color = NeruppuRed, style = MaterialTheme.typography.bodySmall) }
 
                 if (state.role != RemoteRole.NONE) {
@@ -319,9 +338,53 @@ private fun fieldColors() = OutlinedTextFieldDefaults.colors(
 @Composable
 fun RemoteControlScreen(viewModel: RemoteControlViewModel) {
     val state by viewModel.uiState.collectAsState()
+    val unlock = rememberRemoteUnlock()
+    var unlockError by remember { mutableStateOf<String?>(null) }
+    val requestUnlock = {
+        unlockError = null
+        unlock.run(onError = { unlockError = it }) { viewModel.start() }
+    }
+    // Ask once when the screen opens; afterwards the Unlock button asks.
     DisposableEffect(Unit) {
-        viewModel.start()
+        requestUnlock()
         onDispose { viewModel.stop() }
+    }
+    // Leaving the app hides everything and locks again (not while the PIN
+    // screen of the prompt itself is in front).
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP && !RemoteLock.prompting) {
+                RemoteLock.relock()
+                viewModel.stop()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    if (state.locked) {
+        Column(Modifier.fillMaxSize().background(BackgroundPrimary)) {
+            ScreenHeader(title = "Remote")
+            Column(
+                modifier = Modifier.fillMaxSize().padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(Icons.Default.Lock, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(48.dp))
+                Text("Remote control locked", color = TextPrimary, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Its keys open the guarded phone's photos: unlock with your fingerprint or screen lock.",
+                    color = TextSecondary, style = MaterialTheme.typography.bodySmall
+                )
+                Button(
+                    onClick = requestUnlock,
+                    colors = ButtonDefaults.buttonColors(containerColor = NeruppuOrange)
+                ) { Text("Unlock") }
+                (unlockError ?: state.error)?.let { Text(it, color = NeruppuRed, style = MaterialTheme.typography.bodySmall) }
+            }
+        }
+        return
     }
 
     Column(Modifier.fillMaxSize().background(BackgroundPrimary)) {

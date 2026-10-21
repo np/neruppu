@@ -70,6 +70,8 @@ dependencies {
     implementation(project(":domain"))
     implementation(project(":data"))
     implementation(project(":ui"))
+    // BiometricPrompt needs a FragmentActivity
+    implementation(libs.androidx.biometric)
     implementation(project(":core"))
 
     implementation(libs.androidx.core.ktx)

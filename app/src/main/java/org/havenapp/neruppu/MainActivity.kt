@@ -25,7 +25,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.provider.Settings
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -58,6 +58,7 @@ import androidx.compose.material.icons.filled.Phone
 import org.havenapp.neruppu.domain.remote.RemoteRole
 import org.havenapp.neruppu.ui.features.dashboard.DashboardScreen
 import org.havenapp.neruppu.ui.features.remote.RemoteControlScreen
+import org.havenapp.neruppu.ui.features.remote.RemoteLock
 import org.havenapp.neruppu.ui.features.remote.RemoteControlViewModel
 import org.havenapp.neruppu.ui.features.remote.RemotePairingViewModel
 import org.havenapp.neruppu.ui.features.dashboard.StartWarningsDialog
@@ -70,7 +71,8 @@ import org.havenapp.neruppu.ui.features.settings.SettingsScreen
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+// FragmentActivity (a ComponentActivity) because BiometricPrompt requires it.
+class MainActivity : FragmentActivity() {
 
     @Inject
     lateinit var alertTargetRepository: AlertTargetRepository
@@ -153,6 +155,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // The remote control asks for an unlock again when the app returns
+        // (but not when the stop comes from its own PIN prompt).
+        if (!RemoteLock.prompting) RemoteLock.relock()
     }
 
     override fun onDestroy() {

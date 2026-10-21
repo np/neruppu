@@ -44,6 +44,9 @@ class RemoteControlRepositoryImpl @Inject constructor(
 
     override val role: RemoteRole get() = config.role
 
+    override fun isUnlocked(): Boolean =
+        config.role != RemoteRole.CONTROLLER || runCatching { config.identity != null }.getOrDefault(false)
+
     override fun createControllerPairing(server: String): String {
         val identity = keyring.generateIdentity()
         val pairing = RemoteProtocol.Pairing(
@@ -129,8 +132,13 @@ class RemoteControlRepositoryImpl @Inject constructor(
     }
 
     override fun updates(): Flow<RemoteUpdate> = flow {
-        val pairing = config.pairing ?: return@flow
-        val identity = config.identity ?: return@flow
+        // Read once while unlocked; kept in memory only while the screen listens.
+        val (pairing, identity) = try {
+            (config.pairing ?: return@flow) to (config.identity ?: return@flow)
+        } catch (e: Exception) {
+            emit(RemoteUpdate.Failure(clock(), e.message ?: "Locked"))
+            return@flow
+        }
         val key = RemoteProtocol.keyBytes(pairing)
         val seen = LinkedHashSet<String>()
         // First connection looks back a little, to catch an answer that raced it.

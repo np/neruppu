@@ -23,9 +23,11 @@ securityCrypto = "1.1.0-alpha06"
 neruppuAge = "1.0.0"
 zxingEmbedded = "4.3.0"
 zxingCore = "3.5.3"
+biometric = "1.1.0"
 serialization = "1.6.3"
 
 [libraries]
+androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
 zxing-android-embedded = { group = "com.journeyapps", name = "zxing-android-embedded", version.ref = "zxingEmbedded" }
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxingCore" }
 neruppu-age = { group = "org.havenapp.neruppu", name = "neruppu-age", version.ref = "neruppuAge" }

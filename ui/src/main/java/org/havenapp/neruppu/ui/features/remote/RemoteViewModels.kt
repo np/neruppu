@@ -30,6 +30,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.havenapp.neruppu.domain.remote.RemoteCommand
 import org.havenapp.neruppu.domain.remote.RemoteControlRepository
+import org.havenapp.neruppu.domain.remote.RemoteLockedException
 import org.havenapp.neruppu.domain.remote.RemoteRole
 import org.havenapp.neruppu.domain.remote.RemoteStatus
 import org.havenapp.neruppu.domain.remote.RemoteUpdate
@@ -43,7 +44,9 @@ data class RemotePairingUiState(
     val info: String? = null,
     /** Bumped when settings were applied to this phone, so screens reload. */
     val settingsVersion: Int = 0,
-    val busy: Boolean = false
+    val busy: Boolean = false,
+    /** Remote whose secrets need an unlock before the code can be shown. */
+    val locked: Boolean = false
 )
 
 @HiltViewModel
@@ -60,12 +63,13 @@ class RemotePairingViewModel @Inject constructor(
     }
 
     private suspend fun refresh(error: String? = null, info: String? = null, settingsApplied: Boolean = false) {
-        val (role, code) = withContext(Dispatchers.IO) { repository.role to repository.pairingCode() }
+        val (role, code) = withContext(Dispatchers.IO) { repository.role to runCatching { repository.pairingCode() } }
         _uiState.update {
             RemotePairingUiState(
                 role = role,
-                pairingCode = code,
-                error = error,
+                pairingCode = code.getOrNull(),
+                locked = code.exceptionOrNull() is RemoteLockedException,
+                error = error ?: code.exceptionOrNull()?.takeIf { e -> e !is RemoteLockedException }?.message,
                 info = info,
                 settingsVersion = it.settingsVersion + if (settingsApplied) 1 else 0
             )
@@ -122,6 +126,11 @@ class RemotePairingViewModel @Inject constructor(
     }
 
     fun clearError() = _uiState.update { it.copy(error = null, info = null) }
+
+    /** After a successful unlock prompt: the code can be read now. */
+    fun onUnlocked() {
+        viewModelScope.launch { refresh() }
+    }
 }
 
 data class RemoteControlUiState(
@@ -131,7 +140,8 @@ data class RemoteControlUiState(
     val photo: ByteArray? = null,
     val photoAt: Long? = null,
     val waitingFor: RemoteCommand? = null,
-    val error: String? = null
+    val error: String? = null,
+    val locked: Boolean = true
 )
 
 @HiltViewModel
@@ -144,9 +154,16 @@ class RemoteControlViewModel @Inject constructor(
     private var listening: Job? = null
 
     /** Subscribes while the remote screen is visible. */
+    /** Call after a successful unlock; stays locked if the keys still cannot be read. */
     fun start() {
         if (listening?.isActive == true) return
         listening = viewModelScope.launch(Dispatchers.IO) {
+            if (!repository.isUnlocked()) {
+                _uiState.update { it.copy(locked = true) }
+                return@launch
+            }
+            _uiState.update { it.copy(locked = false, error = null) }
+            send(RemoteCommand.STATUS)
             repository.updates().collect { update ->
                 _uiState.update { state ->
                     when (update) {
@@ -164,12 +181,13 @@ class RemoteControlViewModel @Inject constructor(
                 }
             }
         }
-        send(RemoteCommand.STATUS)
     }
 
+    /** Leaving the screen: forget what was shown and require an unlock next time. */
     fun stop() {
         listening?.cancel()
         listening = null
+        _uiState.value = RemoteControlUiState()
     }
 
     fun send(command: RemoteCommand) {
@@ -177,7 +195,13 @@ class RemoteControlViewModel @Inject constructor(
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) { repository.send(command) }
             result.exceptionOrNull()?.let { e ->
-                _uiState.update { it.copy(waitingFor = null, error = e.message ?: "Could not reach ntfy") }
+                _uiState.update {
+                    it.copy(
+                        waitingFor = null,
+                        locked = it.locked || e is RemoteLockedException,
+                        error = e.message ?: "Could not reach ntfy"
+                    )
+                }
             }
         }
     }

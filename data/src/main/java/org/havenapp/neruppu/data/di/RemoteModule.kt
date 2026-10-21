@@ -30,6 +30,8 @@ import org.havenapp.neruppu.data.remote.DeviceConfigSource
 import org.havenapp.neruppu.data.remote.DeviceConfigTransfer
 import org.havenapp.neruppu.data.remote.EncryptedRemoteConfigStore
 import org.havenapp.neruppu.data.remote.GoAgeKeyring
+import org.havenapp.neruppu.data.remote.KeystoreSecretVault
+import org.havenapp.neruppu.data.remote.SecretVault
 import org.havenapp.neruppu.data.remote.NtfyClient
 import org.havenapp.neruppu.data.remote.NtfyRemoteGuard
 import org.havenapp.neruppu.data.remote.RemoteConfigStore
@@ -56,6 +58,9 @@ abstract class RemoteModule {
 
     @Binds @Singleton
     abstract fun bindDeviceConfig(impl: DeviceConfigTransfer): DeviceConfigSource
+
+    @Binds @Singleton
+    abstract fun bindSecretVault(impl: KeystoreSecretVault): SecretVault
 
     companion object {
         /**

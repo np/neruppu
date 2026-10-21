@@ -70,6 +70,8 @@ dependencies {
     // QR codes for remote-control pairing
     implementation(libs.zxing.android.embedded)
     implementation(libs.zxing.core)
+    // Unlock of the remote control (see data/remote/SecretVault.kt)
+    implementation(libs.androidx.biometric)
     implementation(libs.androidx.camera.core)
     implementation(libs.androidx.camera.camera2)
     implementation(libs.androidx.camera.lifecycle)

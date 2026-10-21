@@ -363,4 +363,47 @@ class RemoteRoundTripTest {
         assertEquals(false, repo(guardPhone).pairAsGuard(code).getOrThrow())
         assertEquals(RemoteRole.GUARD, guardPhone.config.role)
     }
+
+    // --- Biometric lock ---------------------------------------------------
+
+    /** Like the Keystore-backed store: secrets unreadable until unlocked. */
+    private class LockableConfig(private val inner: MemoryConfig = MemoryConfig()) : RemoteConfigStore by inner {
+        var unlocked = true
+        override val pairing: RemoteProtocol.Pairing?
+            get() = if (inner.role == RemoteRole.CONTROLLER && !unlocked) throw org.havenapp.neruppu.domain.remote.RemoteLockedException() else inner.pairing
+        override val identity: String?
+            get() = if (inner.role == RemoteRole.CONTROLLER && !unlocked) throw org.havenapp.neruppu.domain.remote.RemoteLockedException() else inner.identity
+    }
+
+    @Test
+    fun `TC-RC-16 a locked remote cannot send, read answers or show its code`() = runBlocking {
+        val config = LockableConfig()
+        val remote = RemoteControlRepositoryImpl(config, ntfy, keyring, MemoryKeys(), NoSettings)
+        remote.createControllerPairing("https://ntfy.test")
+        assertTrue(remote.isUnlocked())
+
+        config.unlocked = false
+
+        assertFalse(remote.isUnlocked())
+        assertTrue(remote.send(RemoteCommand.PHOTO).exceptionOrNull() is org.havenapp.neruppu.domain.remote.RemoteLockedException)
+        assertTrue(runCatching { remote.pairingCode() }.exceptionOrNull() is org.havenapp.neruppu.domain.remote.RemoteLockedException)
+        // The answer stream reports the lock and ends instead of crashing the screen.
+        val updates = remote.updates().toList()
+        assertEquals(1, updates.size)
+        assertTrue(updates.single() is RemoteUpdate.Failure)
+        assertTrue(ntfyServer.topics.isEmpty())
+    }
+
+    @Test
+    fun `TC-RC-17 a guarded phone works unattended, it has nothing to unlock`() = runBlocking {
+        val code = RemoteControlRepositoryImpl(MemoryConfig(), ntfy, keyring, MemoryKeys(), NoSettings)
+            .createControllerPairing("https://ntfy.test")
+        val guardConfig = LockableConfig().apply { unlocked = false }
+        val guard = RemoteControlRepositoryImpl(guardConfig, ntfy, keyring, MemoryKeys(), NoSettings)
+
+        guard.pairAsGuard(code).getOrThrow()
+
+        assertTrue(guard.isUnlocked())
+        assertTrue(guardConfig.pairing != null)
+    }
 }
