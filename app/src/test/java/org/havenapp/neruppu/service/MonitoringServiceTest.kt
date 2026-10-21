@@ -79,6 +79,8 @@ class MonitoringServiceTest {
 
     @Before
     fun setup() {
+        org.robolectric.Shadows.shadowOf(RuntimeEnvironment.getApplication())
+            .grantPermissions(android.Manifest.permission.CAMERA, android.Manifest.permission.RECORD_AUDIO)
         mockkStatic(androidx.work.WorkManager::class)
         val mockWorkManager = mockk<androidx.work.WorkManager>(relaxed = true)
         every { androidx.work.WorkManager.getInstance(any()) } returns mockWorkManager
@@ -236,6 +238,18 @@ class MonitoringServiceTest {
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
 
         coVerify(exactly = 1) { mediaUploadRepository.enqueueUpload(1L) }
+    }
+
+    @Test
+    fun `TC-SVC-11 Without camera and microphone access guarding does not start`() {
+        org.robolectric.Shadows.shadowOf(RuntimeEnvironment.getApplication())
+            .denyPermissions(android.Manifest.permission.CAMERA)
+
+        assertEquals(false, service.toggleMonitoring())
+        assertFalse(service.isMonitoring.value)
+        // Nor does the dashboard open the camera for its live levels.
+        service.setUiActive(true)
+        verify(exactly = 0) { cameraManager.bindCamera(any(), any(), any(), any()) }
     }
 
     @Test

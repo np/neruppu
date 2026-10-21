@@ -315,9 +315,17 @@ class MonitoringService : LifecycleService() {
     }
 
     private val _uiActive = MutableStateFlow(false)
+    /** Camera and microphone: needed to guard and for the dashboard's live levels. */
+    private fun hasSensorPermissions(): Boolean = listOf(
+        android.Manifest.permission.CAMERA,
+        android.Manifest.permission.RECORD_AUDIO
+    ).all { checkSelfPermission(it) == android.content.pm.PackageManager.PERMISSION_GRANTED }
+
     fun setUiActive(active: Boolean) {
-        _uiActive.value = active
-        if (active) {
+        // Without the permissions the dashboard shows no live levels rather
+        // than opening the camera or microphone and failing.
+        _uiActive.value = active && hasSensorPermissions()
+        if (_uiActive.value) {
             startMonitoring()
         } else {
             startMonitoringIfNeeded()
@@ -353,6 +361,15 @@ class MonitoringService : LifecycleService() {
      * refuse loudly instead.
      */
     fun toggleMonitoring(): Boolean {
+        // A camera/microphone foreground service without those permissions
+        // crashes on Android 14+; the activity asks for them first.
+        if (!_isMonitoring.value && !hasSensorPermissions()) {
+            Log.w("MonitoringService", "Camera/microphone permission missing - monitoring not started")
+            notificationManager.notify(ERROR_NOTIFICATION_ID, createErrorNotification(
+                "Camera and microphone access needed — monitoring not started"
+            ))
+            return false
+        }
         if (!_isMonitoring.value && !encryptionKeyRepository.isConfigured) {
             Log.w("MonitoringService", "No age key configured - monitoring not started")
             notificationManager.notify(ERROR_NOTIFICATION_ID, createErrorNotification(

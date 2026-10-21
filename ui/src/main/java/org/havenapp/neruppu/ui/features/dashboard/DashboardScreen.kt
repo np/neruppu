@@ -70,6 +70,9 @@ fun DashboardScreen(
     useFrontCamera: Boolean = false,
     // Captures are encrypted to an age key; guarding cannot start without one
     encryptionConfigured: Boolean = true,
+    // Camera/microphone not granted yet: asked on Start, or now with Allow
+    permissionsMissing: Boolean = false,
+    onGrantPermissions: () -> Unit = {},
     // SystemClock.elapsedRealtime() at which the exit delay ends; 0 when idle
     armedAtElapsed: Long = 0L
 ) {
@@ -138,6 +141,25 @@ fun DashboardScreen(
                 }
                 
                 Spacer(modifier = Modifier.height(12.dp))
+
+                if (!isMonitoring && permissionsMissing) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            stringResource(R.string.permission_guard_hint),
+                            color = TextSecondary,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = onGrantPermissions) {
+                            Text(stringResource(R.string.permission_allow), color = NeruppuOrange)
+                        }
+                    }
+                }
 
                 if (!isMonitoring && !encryptionConfigured) {
                     Text(

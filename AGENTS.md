@@ -22,6 +22,7 @@ The project follows **Clean Architecture** principles and is structured into a m
 
 *   **Exit delay (arming)**: after Start, `MonitoringService` ignores every event until `armedAtElapsed` (`SystemClock.elapsedRealtime()`), default 60 s, set in Settings → Exit delay (`arming_delay_seconds` in `neruppu_prefs`, 0–10 min). Sensors already run so baselines settle; `isArmed()` gates `handleEvent`, the camera callback and the microphone trigger. The ongoing notification shows a system countdown; a "Guarding active" notification (channel `guard_status_channel`) is posted when it ends; the dashboard shows "Arming in m:ss".
 
+*   **Permissions**: the app opens without camera/microphone. `MainActivity.withGuardPermissions` asks for them (plus notifications) when Start is pressed and resumes the start once granted; the dashboard shows a hint with *Allow*; if denied for good, `GuardPermissionsDialog` points to the system settings. A remote-control phone never asks. `MonitoringService` also refuses to guard, and to bind sensors for the dashboard, without them (a camera/microphone foreground service without permission crashes on Android 14+).
 *   **Start checks**: before starting, `MainActivity` runs `StartChecks` and, if needed, shows the modal `StartWarningsDialog` ("Start anyway" / "Cancel"): no validated internet (only when an alert channel is active) and charger not plugged in. Warnings never block starting.
 
 ## 4. Alerting Protocol (Matrix)

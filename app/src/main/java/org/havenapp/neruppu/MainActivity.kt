@@ -65,7 +65,7 @@ import org.havenapp.neruppu.ui.features.dashboard.StartWarningsDialog
 import javax.inject.Inject
 import org.havenapp.neruppu.ui.features.logs.LogsScreen
 import org.havenapp.neruppu.ui.features.logs.LogsViewModel
-import org.havenapp.neruppu.ui.features.permission.PermissionScreen
+import org.havenapp.neruppu.ui.features.permission.GuardPermissionsDialog
 import org.havenapp.neruppu.ui.features.settings.EncryptionSettingsViewModel
 import org.havenapp.neruppu.ui.features.settings.SettingsScreen
 import dagger.hilt.android.AndroidEntryPoint
@@ -79,7 +79,6 @@ class MainActivity : FragmentActivity() {
 
     private val monitoringService = mutableStateOf<MonitoringService?>(null)
     private var isBound = false
-    private var hasPermissions by mutableStateOf(false)
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(className: ComponentName?, service: IBinder?) {
@@ -99,14 +98,30 @@ class MainActivity : FragmentActivity() {
         }
     }
 
-    private val requestPermissionLauncher = registerForActivityResult(
+    /**
+     * Camera and microphone are needed only to guard: the app opens without
+     * them, and a remote-control phone never asks. They are requested when
+     * Start is pressed (or from the dashboard hint), then the start resumes.
+     */
+    private var hasGuardPermissions by mutableStateOf(false)
+    /** Denied for good ("don't ask again"): only the system settings can grant them. */
+    private var guardPermissionsBlocked by mutableStateOf(false)
+    private var afterGuardPermissions: (() -> Unit)? = null
+
+    private val guardPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val allGranted = permissions.entries.all { it.value }
-        hasPermissions = allGranted
-        if (allGranted) {
-            bindMonitoringService()
+    ) { _ ->
+        hasGuardPermissions = checkGuardPermissions()
+        if (hasGuardPermissions) {
+            afterGuardPermissions?.invoke()
+        } else {
+            // No rationale after a denial means the system will not ask again.
+            guardPermissionsBlocked = GUARD_PERMISSIONS.any {
+                ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED &&
+                    !shouldShowRequestPermissionRationale(it)
+            }
         }
+        afterGuardPermissions = null
     }
 
     private fun bindMonitoringService() {
@@ -115,42 +130,36 @@ class MainActivity : FragmentActivity() {
         }
     }
 
-    private fun getRequiredPermissions(): Array<String> {
-        val permissions = mutableListOf(
-            Manifest.permission.CAMERA,
-            Manifest.permission.RECORD_AUDIO
-        )
+    private fun checkGuardPermissions(): Boolean = GUARD_PERMISSIONS.all {
+        ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+    }
+
+    /** Runs [then] at once if granted, else asks (with notifications, optional) and runs it if granted. */
+    private fun withGuardPermissions(then: () -> Unit) {
+        if (checkGuardPermissions()) {
+            hasGuardPermissions = true
+            then()
+            return
+        }
+        afterGuardPermissions = then
+        val request = GUARD_PERMISSIONS.toMutableList()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+            request += Manifest.permission.POST_NOTIFICATIONS
         }
-        return permissions.toTypedArray()
+        guardPermissionLauncher.launch(request.toTypedArray())
     }
 
-    private fun hasAllPermissions(): Boolean {
-        return getRequiredPermissions().all { permission ->
-            ContextCompat.checkSelfPermission(this, permission) ==
-                PackageManager.PERMISSION_GRANTED
-        }
-    }
-
-    private fun checkAndRequestPermissions() {
-        if (!hasAllPermissions()) {
-            requestPermissionLauncher.launch(getRequiredPermissions())
-        } else {
-            hasPermissions = true
-            bindMonitoringService()
-        }
+    private fun openAppSettings() {
+        startActivity(
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null))
+        )
     }
 
     override fun onResume() {
         super.onResume()
-        val currentlyHasPermissions = hasAllPermissions()
-        if (hasPermissions != currentlyHasPermissions) {
-            hasPermissions = currentlyHasPermissions
-            if (hasPermissions) {
-                bindMonitoringService()
-            }
-        }
+        // Granted or revoked in the system settings meanwhile.
+        hasGuardPermissions = checkGuardPermissions()
+        if (hasGuardPermissions) guardPermissionsBlocked = false
     }
 
     override fun onPause() {
@@ -173,30 +182,23 @@ class MainActivity : FragmentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen().setKeepOnScreenCondition { !hasPermissions }
+        installSplashScreen()
         super.onCreate(savedInstanceState)
 
-        checkAndRequestPermissions()
+        hasGuardPermissions = checkGuardPermissions()
+        bindMonitoringService()
 
         setContent {
             NeruppuTheme {
-                if (!hasPermissions) {
-                    PermissionScreen(
-                        onPermissionsGranted = {
-                            hasPermissions = true
-                            bindMonitoringService()
-                        },
+                MainAppScreen()
+                if (guardPermissionsBlocked) {
+                    GuardPermissionsDialog(
                         onOpenSettings = {
-                            startActivity(
-                                Intent(
-                                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                                    Uri.fromParts("package", packageName, null)
-                                )
-                            )
-                        }
+                            guardPermissionsBlocked = false
+                            openAppSettings()
+                        },
+                        onDismiss = { guardPermissionsBlocked = false }
                     )
-                } else {
-                    MainAppScreen()
                 }
             }
         }
@@ -343,25 +345,21 @@ class MainActivity : FragmentActivity() {
                                 accelerometerStable = true,
                                     onToggleMonitoring = {
                                         if (!isMonitoring) {
-                                            val hasCamera = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
-                                            val hasAudio = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-                                            if (!hasCamera || !hasAudio) {
-                                                hasPermissions = false
-                                                return@DashboardScreen
-                                            }
                                             // Checked before startForegroundService(): a refused start
                                             // would never reach startForeground() and crash the service.
                                             if (!encryptionUiState.isConfigured) {
                                                 return@DashboardScreen
                                             }
-                                            val warnings = StartChecks.warnings(
-                                                context,
-                                                alertChannelActive = alertTargetRepository.activeTarget != AlertTarget.NONE
-                                            )
-                                            if (warnings.isNotEmpty()) {
-                                                startWarnings = warnings
-                                            } else {
-                                                startGuarding()
+                                            withGuardPermissions {
+                                                val warnings = StartChecks.warnings(
+                                                    context,
+                                                    alertChannelActive = alertTargetRepository.activeTarget != AlertTarget.NONE
+                                                )
+                                                if (warnings.isNotEmpty()) {
+                                                    startWarnings = warnings
+                                                } else {
+                                                    startGuarding()
+                                                }
                                             }
                                         } else {
                                             service.toggleMonitoring()
@@ -369,14 +367,17 @@ class MainActivity : FragmentActivity() {
                                     },
                                 useFrontCamera = useFrontCamera,
                                 encryptionConfigured = encryptionUiState.isConfigured,
+                                permissionsMissing = !hasGuardPermissions,
+                                onGrantPermissions = { withGuardPermissions {} },
                                 armedAtElapsed = armedAtElapsed,
                                 sessionStartTime = sessionStartTime,
                                 lastGuardedTime = lastGuardedTime
                             )
 
                             val lifecycleOwner = LocalLifecycleOwner.current
-                            DisposableEffect(lifecycleOwner) {
-                                service.setUiActive(true)
+                            // Live levels and camera preview need the permissions.
+                            DisposableEffect(lifecycleOwner, hasGuardPermissions) {
+                                if (hasGuardPermissions) service.setUiActive(true)
                                 onDispose {
                                     service.setUiActive(false)
                                 }
@@ -452,5 +453,9 @@ class MainActivity : FragmentActivity() {
                 }
             }
         }
+    }
+
+    private companion object {
+        val GUARD_PERMISSIONS = listOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
     }
 }
