@@ -104,3 +104,23 @@ downloadable.
 - `data/remote/DeviceConfigTransfer.kt`: which settings travel, collect/apply.
 - `age-encryption/remote.go`: `GenerateIdentity`, `RecipientOf`,
   `DecryptBytes`, used only on the remote phone.
+
+## Links in ntfy alerts
+
+When the guarded phone is paired, its ntfy **alert** notifications carry
+links that open Neruppu on the remote (ntfy `Click` and `Actions` headers):
+
+- tapping the notification opens the Remote screen, or the capture if there
+  is one: `neruppu://remote`, `neruppu://capture?f=<timestamp>.age`;
+- buttons *View capture* and *Take photo* (`neruppu://photo`).
+
+Anyone who knows the alert topic can post such links, so they carry no
+secret and no URL. A capture is named only by its file name: the remote
+polls its **own** ntfy alert channel (server, topic and token it handed over
+at pairing), takes the attachment with that name, downloads it only from that
+server, and decrypts it with its age identity (the guarded phone encrypts
+captures to the remote's key too). Nothing happens before the biometric
+unlock, and *Take photo* asks for confirmation. Audio captures cannot be
+shown; ntfy.sh keeps attachments for a few hours only.
+
+Other channels (Telegram, Matrix, HTTPS) do not get these links.

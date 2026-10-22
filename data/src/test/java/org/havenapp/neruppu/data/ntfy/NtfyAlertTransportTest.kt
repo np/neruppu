@@ -62,7 +62,7 @@ class NtfyAlertTransportTest {
             requests += request to request.body.toByteArray()
             respond(body, status)
         }
-        return NtfyAlertTransport(config, HttpClient(engine))
+        return NtfyAlertTransport(config, HttpClient(engine), linksEnabled = { false })
     }
 
     private fun blob(): AlertPayload.MediaAlert {
@@ -83,6 +83,7 @@ class NtfyAlertTransportTest {
         assertEquals("Neruppu", request.headers["Title"])
         assertEquals("high", request.headers["Priority"])
         assertNull(request.headers[HttpHeaders.Authorization])
+        assertNull(request.headers["Click"])
         assertTrue(String(body).contains("Light change"))
     }
 

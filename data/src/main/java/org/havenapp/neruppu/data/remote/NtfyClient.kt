@@ -74,15 +74,16 @@ class NtfyClient(private val client: HttpClient) {
         check(response.status.isSuccess()) { "ntfy upload failed: ${response.status}" }
     }
 
-    suspend fun download(url: String, maxBytes: Long = MAX_DOWNLOAD_BYTES): ByteArray {
-        val response = client.get(url)
+    suspend fun download(url: String, maxBytes: Long = MAX_DOWNLOAD_BYTES, token: String? = null): ByteArray {
+        val response = client.get(url) { auth(token) }
         check(response.status.isSuccess()) { "ntfy download failed: ${response.status}" }
         return response.readBytes().also { check(it.size <= maxBytes) { "Attachment too large" } }
     }
 
     /** Messages still cached on the server for [topic], oldest first. */
-    suspend fun poll(server: String, topic: String): List<Event> {
+    suspend fun poll(server: String, topic: String, token: String? = null): List<Event> {
         val response = client.get("$server/$topic/json") {
+            auth(token)
             parameter("poll", "1")
             parameter("since", "all")
         }
@@ -116,6 +117,10 @@ class NtfyClient(private val client: HttpClient) {
                 if (event?.event == "message") emit(event)
             }
         }
+    }
+
+    private fun io.ktor.client.request.HttpRequestBuilder.auth(token: String?) {
+        if (!token.isNullOrBlank()) header(io.ktor.http.HttpHeaders.Authorization, "Bearer $token")
     }
 
     companion object {

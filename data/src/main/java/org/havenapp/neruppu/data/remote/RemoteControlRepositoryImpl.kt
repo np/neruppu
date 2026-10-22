@@ -24,9 +24,12 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.encodeToString
 import org.havenapp.neruppu.domain.remote.RemoteCommand
 import org.havenapp.neruppu.domain.remote.RemoteControlRepository
+import org.havenapp.neruppu.domain.remote.RemoteLink
 import org.havenapp.neruppu.domain.remote.RemoteRole
 import org.havenapp.neruppu.domain.remote.RemoteUpdate
 import org.havenapp.neruppu.domain.repository.EncryptionKeyRepository
+import org.havenapp.neruppu.domain.repository.NtfyAlertConfigRepository
+import java.net.URI
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -37,7 +40,9 @@ class RemoteControlRepositoryImpl @Inject constructor(
     private val ntfy: NtfyClient,
     private val keyring: AgeKeyring,
     private val encryptionKeys: EncryptionKeyRepository,
-    private val settings: DeviceConfigSource
+    private val settings: DeviceConfigSource,
+    /** The remote's own ntfy alert channel, also handed to the guarded phone at pairing. */
+    private val alerts: NtfyAlertConfigRepository
 ) : RemoteControlRepository {
 
     internal var clock: () -> Long = System::currentTimeMillis
@@ -116,6 +121,33 @@ class RemoteControlRepositoryImpl @Inject constructor(
     }
 
     override fun unpair() = config.clear()
+
+    override suspend fun openAlertCapture(fileName: String): Result<RemoteUpdate.Photo> = runCatching {
+        val link = RemoteLink.parse(RemoteLink.capture(fileName)) as? RemoteLink.Capture
+            ?: throw IllegalArgumentException("Not a capture name")
+        check(config.role == RemoteRole.CONTROLLER) { "Not a remote control" }
+        val identity = checkNotNull(config.identity) { "Not paired" }
+        check(alerts.isComplete) { "No ntfy alert channel on this remote: the capture cannot be fetched" }
+        val server = alerts.server.trim().trimEnd('/')
+        val token = alerts.accessToken.takeIf { it.isNotBlank() }
+        val attachment = ntfy.poll(server, alerts.topic, token)
+            .lastOrNull { it.attachment?.name == fileName }?.attachment
+            ?: error("This capture is no longer on the ntfy server (attachments expire after a few hours)")
+        // Taken from the server's answer, still only fetched from that server.
+        check(sameHost(attachment.url, server)) { "The capture is hosted elsewhere: refused" }
+        val plain = runCatching { keyring.decrypt(ntfy.download(attachment.url, token = token), identity) }
+            .getOrElse { throw IllegalStateException("This capture is not encrypted for this remote") }
+        check(plain.size > 2 && plain[0] == 0xFF.toByte() && plain[1] == 0xD8.toByte()) {
+            "This capture is a sound recording: open it with neruppu-decrypt"
+        }
+        RemoteUpdate.Photo(link.timestamp, plain)
+    }
+
+    private fun sameHost(url: String, server: String): Boolean = runCatching {
+        val a = URI(url)
+        val b = URI(server)
+        a.scheme == "https" && a.host.equals(b.host, ignoreCase = true) && a.port == b.port
+    }.getOrDefault(false)
 
     override suspend fun send(command: RemoteCommand): Result<Unit> = runCatching {
         val pairing = checkNotNull(config.pairing) { "Not paired" }

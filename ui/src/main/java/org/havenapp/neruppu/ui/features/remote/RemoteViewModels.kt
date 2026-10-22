@@ -141,6 +141,9 @@ data class RemoteControlUiState(
     val photoAt: Long? = null,
     val photoDark: Boolean = false,
     val photoFrontCamera: Boolean? = null,
+    /** The photo is an event capture opened from an alert, not one asked for. */
+    val photoIsCapture: Boolean = false,
+    val openingCapture: Boolean = false,
     val waitingFor: RemoteCommand? = null,
     val error: String? = null,
     val locked: Boolean = true
@@ -175,7 +178,7 @@ class RemoteControlViewModel @Inject constructor(
                             waitingFor = state.waitingFor.takeIf { it != RemoteCommand.STATUS }
                         )
                         is RemoteUpdate.Photo -> state.copy(
-                            photo = update.jpeg, photoAt = update.at, photoDark = update.dark, photoFrontCamera = update.frontCamera, error = null,
+                            photo = update.jpeg, photoAt = update.at, photoDark = update.dark, photoFrontCamera = update.frontCamera, photoIsCapture = false, error = null,
                             waitingFor = state.waitingFor.takeIf { it != RemoteCommand.PHOTO }
                         )
                         is RemoteUpdate.Failure -> state.copy(error = update.message, waitingFor = null)
@@ -190,6 +193,31 @@ class RemoteControlViewModel @Inject constructor(
         listening?.cancel()
         listening = null
         _uiState.value = RemoteControlUiState()
+    }
+
+    /** From an alert's "View capture" link; call once unlocked. */
+    fun openCapture(fileName: String) {
+        _uiState.update { it.copy(openingCapture = true, error = null) }
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { repository.openAlertCapture(fileName) }
+            _uiState.update { state ->
+                result.fold(
+                    onSuccess = {
+                        state.copy(
+                            photo = it.jpeg, photoAt = it.at, photoDark = false, photoFrontCamera = null,
+                            photoIsCapture = true, openingCapture = false
+                        )
+                    },
+                    onFailure = { e ->
+                        state.copy(
+                            openingCapture = false,
+                            locked = state.locked || e is RemoteLockedException,
+                            error = e.message ?: "Could not open the capture"
+                        )
+                    }
+                )
+            }
+        }
     }
 
     fun send(command: RemoteCommand) {

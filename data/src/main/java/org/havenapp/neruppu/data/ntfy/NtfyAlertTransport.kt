@@ -34,8 +34,11 @@ import io.ktor.http.isSuccess
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.havenapp.neruppu.data.BuildConfig
+import org.havenapp.neruppu.data.remote.RemoteConfigStore
+import org.havenapp.neruppu.domain.remote.RemoteLink
 import org.havenapp.neruppu.data.storage.MediaStorageRepositoryImpl
 import org.havenapp.neruppu.domain.model.AlertPayload
+import org.havenapp.neruppu.domain.remote.RemoteRole
 import org.havenapp.neruppu.domain.repository.NtfyAlertConfigRepository
 import org.havenapp.neruppu.domain.transport.AlertTransport
 import org.havenapp.neruppu.domain.util.AlertMessageFormatter
@@ -49,10 +52,19 @@ import javax.inject.Singleton
  * Filename), still age-encrypted, so ntfy never sees a photo or a sound.
  */
 @Singleton
-class NtfyAlertTransport @Inject constructor(
+class NtfyAlertTransport(
     private val config: NtfyAlertConfigRepository,
-    private val client: HttpClient
+    private val client: HttpClient,
+    /** Paired with a remote: notifications get links that open its app. */
+    private val linksEnabled: () -> Boolean
 ) : AlertTransport {
+
+    @Inject
+    constructor(
+        config: NtfyAlertConfigRepository,
+        client: HttpClient,
+        remote: RemoteConfigStore
+    ) : this(config, client, { remote.role == RemoteRole.GUARD })
 
     override val isConfigured: Boolean get() = config.isComplete
 
@@ -70,7 +82,7 @@ class NtfyAlertTransport @Inject constructor(
                     if (config.attachCaptures) {
                         val name = if (isBlob) AlertMessageFormatter.opaqueFileName(payload)
                         else "${payload.timestamp}.${file.absolutePath.substringAfterLast('.')}"
-                        putFile(File(file.absolutePath).readBytes(), name, message)
+                        putFile(File(file.absolutePath).readBytes(), name, message, RemoteLink.capture(name))
                     } else {
                         postText(message)
                     }
@@ -95,16 +107,32 @@ class NtfyAlertTransport @Inject constructor(
         if (token.isNotBlank()) header(HttpHeaders.Authorization, "Bearer $token")
     }
 
+    /**
+     * Tapping opens the remote (or the capture); buttons for the capture and
+     * a new photo. ntfy hands these to Android, which starts Neruppu.
+     */
+    private fun HttpRequestBuilder.links(captureLink: String?) {
+        if (!linksEnabled()) return
+        header("Click", captureLink ?: RemoteLink.OPEN)
+        val actions = listOfNotNull(
+            captureLink?.let { "view, View capture, $it" },
+            "view, Take photo, ${RemoteLink.PHOTO}"
+        )
+        header("Actions", actions.joinToString("; "))
+    }
+
     private suspend fun postText(text: String) {
         check(client.post(url) {
             common()
+            links(null)
             setBody(TextContent(text, ContentType.Text.Plain))
         })
     }
 
-    private suspend fun putFile(bytes: ByteArray, fileName: String, message: String) {
+    private suspend fun putFile(bytes: ByteArray, fileName: String, message: String, captureLink: String?) {
         check(client.put(url) {
             common()
+            links(captureLink)
             header("Filename", fileName)
             header("Message", message)
             setBody(ByteArrayContent(bytes, ContentType.Application.OctetStream))

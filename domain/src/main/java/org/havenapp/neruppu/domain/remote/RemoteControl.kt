@@ -91,6 +91,12 @@ interface RemoteControlRepository {
 
     suspend fun send(command: RemoteCommand): Result<Unit>
 
+    /**
+     * Controller: fetches an alert capture named [fileName] (`<timestamp>.age`)
+     * from this phone's own ntfy alert channel and decrypts it.
+     */
+    suspend fun openAlertCapture(fileName: String): Result<RemoteUpdate.Photo>
+
     /** Controller: answers from the guarded phone, while collected (reconnects by itself). */
     fun updates(): Flow<RemoteUpdate>
 }

@@ -17,6 +17,9 @@
 
 package org.havenapp.neruppu
 
+import android.content.Intent
+import androidx.compose.runtime.LaunchedEffect
+import org.havenapp.neruppu.domain.remote.RemoteLink
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import android.Manifest
@@ -106,6 +109,15 @@ class MainActivity : FragmentActivity() {
      * Start is pressed (or from the dashboard hint), then the start resumes.
      */
     private var hasGuardPermissions by mutableStateOf(false)
+
+    /** A neruppu:// link from an ntfy alert, for the Remote screen. */
+    private var pendingLink by mutableStateOf<RemoteLink?>(null)
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        RemoteLink.parse(intent.dataString)?.let { pendingLink = it }
+    }
     /** Denied for good ("don't ask again"): only the system settings can grant them. */
     private var guardPermissionsBlocked by mutableStateOf(false)
     private var afterGuardPermissions: (() -> Unit)? = null
@@ -188,6 +200,7 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
 
         hasGuardPermissions = checkGuardPermissions()
+        if (savedInstanceState == null) pendingLink = RemoteLink.parse(intent?.dataString)
         bindMonitoringService()
 
         setContent {
@@ -218,6 +231,10 @@ class MainActivity : FragmentActivity() {
         // A remote-control phone holds the age identity: it must never guard.
         val isRemote = remotePairing.role == RemoteRole.CONTROLLER
         val encryptionUiState by encryptionViewModel.uiState.collectAsState()
+        // Links only mean something on a remote; elsewhere they are ignored.
+        LaunchedEffect(pendingLink, isRemote) {
+            if (pendingLink != null && isRemote) selectedTab = 0
+        }
 
         val context = LocalContext.current
         val prefs = context.getSharedPreferences("neruppu_prefs", MODE_PRIVATE)
@@ -309,7 +326,11 @@ class MainActivity : FragmentActivity() {
                 when (selectedTab) {
                     0 -> if (isRemote) {
                         val remoteControlViewModel: RemoteControlViewModel = hiltViewModel()
-                        RemoteControlScreen(remoteControlViewModel)
+                        RemoteControlScreen(
+                            remoteControlViewModel,
+                            link = pendingLink,
+                            onLinkHandled = { pendingLink = null }
+                        )
                     } else {
                         val service = monitoringService.value
                         if (service != null) {

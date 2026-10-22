@@ -17,6 +17,8 @@
 
 package org.havenapp.neruppu.ui.features.remote
 
+import org.havenapp.neruppu.domain.remote.RemoteLink
+import androidx.compose.runtime.LaunchedEffect
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -334,9 +336,17 @@ private fun fieldColors() = OutlinedTextFieldDefaults.colors(
     unfocusedBorderColor = BorderTertiary
 )
 
-/** The remote's main screen: status of the guarded phone and photo on demand. */
+/**
+ * The remote's main screen: status of the guarded phone and photo on demand.
+ * [link] comes from an ntfy alert; it is acted on only once unlocked, and a
+ * photo request is confirmed first (anyone knowing the topic can post links).
+ */
 @Composable
-fun RemoteControlScreen(viewModel: RemoteControlViewModel) {
+fun RemoteControlScreen(
+    viewModel: RemoteControlViewModel,
+    link: RemoteLink? = null,
+    onLinkHandled: () -> Unit = {}
+) {
     val state by viewModel.uiState.collectAsState()
     val unlock = rememberRemoteUnlock()
     var unlockError by remember { mutableStateOf<String?>(null) }
@@ -361,6 +371,37 @@ fun RemoteControlScreen(viewModel: RemoteControlViewModel) {
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    var confirmPhoto by remember { mutableStateOf(false) }
+    LaunchedEffect(link, state.locked) {
+        val pending = link ?: return@LaunchedEffect
+        if (state.locked) {
+            if (!RemoteLock.prompting) requestUnlock()
+            return@LaunchedEffect
+        }
+        when (pending) {
+            RemoteLink.Open -> Unit
+            RemoteLink.Photo -> confirmPhoto = true
+            is RemoteLink.Capture -> viewModel.openCapture(pending.fileName)
+        }
+        onLinkHandled()
+    }
+    if (confirmPhoto) {
+        AlertDialog(
+            onDismissRequest = { confirmPhoto = false },
+            title = { Text("Take a photo now?", color = TextPrimary) },
+            text = { Text("Asked from an alert notification.", color = TextSecondary) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmPhoto = false
+                    viewModel.send(RemoteCommand.PHOTO)
+                }) { Text("Take photo", color = NeruppuOrange) }
+            },
+            dismissButton = { TextButton(onClick = { confirmPhoto = false }) { Text("Cancel", color = TextSecondary) } },
+            containerColor = Color.White,
+            shape = RoundedCornerShape(16.dp)
+        )
     }
 
     if (state.locked) {
@@ -429,6 +470,14 @@ private fun UnlockedRemote(state: RemoteControlUiState, viewModel: RemoteControl
 
             state.error?.let { Text(it, color = NeruppuRed, style = MaterialTheme.typography.bodySmall) }
 
+            if (state.openingCapture) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(16.dp), color = NeruppuOrange, strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Opening the alert's capture…", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+
             val photo = state.photo
             if (photo != null) {
                 val bitmap = remember(photo) { BitmapFactory.decodeByteArray(photo, 0, photo.size)?.asImageBitmap() }
@@ -446,7 +495,8 @@ private fun UnlockedRemote(state: RemoteControlUiState, viewModel: RemoteControl
                         false -> " · back camera"
                         null -> ""
                     }
-                    Text("Taken ${formatTime(it)}$camera", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+                    val what = if (state.photoIsCapture) "Event capture" else "Taken"
+                    Text("$what ${formatTime(it)}$camera", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
                 }
                 if (state.photoDark) {
                     Text(

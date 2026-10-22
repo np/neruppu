@@ -17,6 +17,14 @@
 
 package org.havenapp.neruppu.data.remote
 
+import org.junit.rules.TemporaryFolder
+import org.junit.Rule
+import org.havenapp.neruppu.domain.repository.NtfyAlertConfigRepository
+import org.havenapp.neruppu.domain.model.SensorType
+import org.havenapp.neruppu.domain.model.MediaFile
+import org.havenapp.neruppu.domain.model.AlertPayload
+import org.havenapp.neruppu.data.storage.MediaStorageRepositoryImpl
+import org.havenapp.neruppu.data.ntfy.NtfyAlertTransport
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -32,6 +40,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import org.havenapp.neruppu.domain.remote.RemoteCommand
+import org.havenapp.neruppu.domain.remote.RemoteLink
 import org.havenapp.neruppu.domain.remote.RemoteRole
 import org.havenapp.neruppu.domain.remote.RemoteStatus
 import org.havenapp.neruppu.domain.remote.RemoteUpdate
@@ -51,9 +60,19 @@ import org.junit.Test
  */
 class RemoteRoundTripTest {
 
+    @get:Rule
+    val tempFolder = TemporaryFolder()
+
     /** In-memory ntfy: topic -> published (message, attachment bytes?) */
     private class FakeNtfy {
-        data class Published(val id: String, val message: String, val file: ByteArray?)
+        data class Published(
+            val id: String,
+            val message: String,
+            val file: ByteArray?,
+            val name: String = "x.age",
+            val click: String? = null,
+            val actions: String? = null
+        )
         val topics = mutableMapOf<String, MutableList<Published>>()
         var counter = 0
 
@@ -65,7 +84,7 @@ class RemoteRoundTripTest {
                     val lines = buildString {
                         append("""{"id":"ka","time":1,"event":"keepalive"}""").append('\n')
                         topics[topic].orEmpty().forEach { p ->
-                            val attachment = if (p.file != null) ""","attachment":{"name":"x.age","url":"https://ntfy.test/file/${p.id}"}""" else ""
+                            val attachment = if (p.file != null) ""","attachment":{"name":"${p.name}","url":"https://ntfy.test/file/${p.id}"}""" else ""
                             append("""{"id":"${p.id}","time":1,"event":"message","message":"${p.message}"$attachment}""").append('\n')
                         }
                     }
@@ -81,7 +100,12 @@ class RemoteRoundTripTest {
                 }
                 request.method == HttpMethod.Put -> {
                     topics.getOrPut(path) { mutableListOf() } +=
-                        Published("m${counter++}", request.headers["Message"]!!, request.body.toByteArray())
+                        Published(
+                            "m${counter++}", request.headers["Message"]!!, request.body.toByteArray(),
+                            name = request.headers["Filename"] ?: "x.age",
+                            click = request.headers["Click"],
+                            actions = request.headers["Actions"]
+                        )
                     respond("{}", HttpStatusCode.OK)
                 }
                 else -> respond("", HttpStatusCode.NotFound)
@@ -115,6 +139,17 @@ class RemoteRoundTripTest {
         override fun clear() { recipients = "" }
     }
 
+    private class MemoryAlerts : NtfyAlertConfigRepository {
+        override var server = "https://ntfy.test"
+        override var topic = "neruppu-alerts12345"
+        override var accessToken = ""
+        override var attachCaptures = true
+        override val isComplete get() = topic.isNotEmpty()
+        override fun clear() { topic = "" }
+    }
+
+    private val alerts = MemoryAlerts()
+
     private object NoSettings : DeviceConfigSource {
         override fun collect(now: Long) = DeviceConfig(ts = now)
         override fun apply(config: DeviceConfig) = Unit
@@ -141,13 +176,13 @@ class RemoteRoundTripTest {
     fun `TC-RC-10 status and photo travel encrypted and come back readable`() = runBlocking {
         // Remote phone creates the pairing; guarded phone scans it.
         val remoteConfig = MemoryConfig()
-        val remote = RemoteControlRepositoryImpl(remoteConfig, ntfy, keyring, MemoryKeys(), NoSettings)
+        val remote = RemoteControlRepositoryImpl(remoteConfig, ntfy, keyring, MemoryKeys(), NoSettings, alerts)
         val code = remote.createControllerPairing("https://ntfy.test")
         assertEquals(RemoteRole.CONTROLLER, remote.role)
 
         val guardConfig = MemoryConfig()
         val guardKeys = MemoryKeys()
-        val guardSide = RemoteControlRepositoryImpl(guardConfig, ntfy, keyring, guardKeys, NoSettings)
+        val guardSide = RemoteControlRepositoryImpl(guardConfig, ntfy, keyring, guardKeys, NoSettings, alerts)
         guardSide.pairAsGuard(code).getOrThrow()
         assertEquals(RemoteRole.GUARD, guardConfig.role)
         assertNull(guardConfig.identity)
@@ -186,7 +221,7 @@ class RemoteRoundTripTest {
     @Test
     fun `TC-RC-11 a remote phone refuses to become a guarded phone`() = runBlocking {
         val config = MemoryConfig()
-        val repo = RemoteControlRepositoryImpl(config, ntfy, keyring, MemoryKeys(), NoSettings)
+        val repo = RemoteControlRepositoryImpl(config, ntfy, keyring, MemoryKeys(), NoSettings, alerts)
         val code = repo.createControllerPairing("https://ntfy.test")
 
         val result = repo.pairAsGuard(code)
@@ -199,7 +234,7 @@ class RemoteRoundTripTest {
     @Test
     fun `TC-RC-12 guard ignores replays, foreign text, and rate-limits photos`() = runBlocking {
         val remoteConfig = MemoryConfig()
-        val remote = RemoteControlRepositoryImpl(remoteConfig, ntfy, keyring, MemoryKeys(), NoSettings)
+        val remote = RemoteControlRepositoryImpl(remoteConfig, ntfy, keyring, MemoryKeys(), NoSettings, alerts)
         remote.createControllerPairing("https://ntfy.test")
         val pairing = remoteConfig.pairing!!
         var now = 1_000_000L
@@ -306,7 +341,7 @@ class RemoteRoundTripTest {
         val settings = DeviceConfigTransfer({ prefs }, telegram, matrix, https, ntfy, target, keys, { it.startsWith("age1") })
     }
 
-    private fun repo(phone: Phone) = RemoteControlRepositoryImpl(phone.config, ntfy, keyring, phone.keys, phone.settings)
+    private fun repo(phone: Phone) = RemoteControlRepositoryImpl(phone.config, ntfy, keyring, phone.keys, phone.settings, alerts)
 
     @Test
     fun `TC-RC-13 pairing hands over sensors, delays, alert channel and age keys`() = runBlocking {
@@ -392,7 +427,7 @@ class RemoteRoundTripTest {
     @Test
     fun `TC-RC-16 a locked remote cannot send, read answers or show its code`() = runBlocking {
         val config = LockableConfig()
-        val remote = RemoteControlRepositoryImpl(config, ntfy, keyring, MemoryKeys(), NoSettings)
+        val remote = RemoteControlRepositoryImpl(config, ntfy, keyring, MemoryKeys(), NoSettings, alerts)
         remote.createControllerPairing("https://ntfy.test")
         assertTrue(remote.isUnlocked())
 
@@ -410,14 +445,59 @@ class RemoteRoundTripTest {
 
     @Test
     fun `TC-RC-17 a guarded phone works unattended, it has nothing to unlock`() = runBlocking {
-        val code = RemoteControlRepositoryImpl(MemoryConfig(), ntfy, keyring, MemoryKeys(), NoSettings)
+        val code = RemoteControlRepositoryImpl(MemoryConfig(), ntfy, keyring, MemoryKeys(), NoSettings, alerts)
             .createControllerPairing("https://ntfy.test")
         val guardConfig = LockableConfig().apply { unlocked = false }
-        val guard = RemoteControlRepositoryImpl(guardConfig, ntfy, keyring, MemoryKeys(), NoSettings)
+        val guard = RemoteControlRepositoryImpl(guardConfig, ntfy, keyring, MemoryKeys(), NoSettings, alerts)
 
         guard.pairAsGuard(code).getOrThrow()
 
         assertTrue(guard.isUnlocked())
         assertTrue(guardConfig.pairing != null)
+    }
+
+    @Test
+    fun `TC-RC-18 an alert links to its capture and the remote opens it`() = runBlocking {
+        val remote = RemoteControlRepositoryImpl(MemoryConfig(), ntfy, keyring, MemoryKeys(), NoSettings, alerts)
+        remote.createControllerPairing("https://ntfy.test")
+
+        // Guarded phone sends an event capture (age blob) through its ntfy alert channel.
+        val blob = tempFolder.newFile("neruppu_motion_1700000000000.jpg.age").apply {
+            writeBytes(FakeKeyring.xor(jpeg, keyring.generateIdentity().length))
+        }
+        val transport = NtfyAlertTransport(alerts, HttpClient(ntfyServer.engine), linksEnabled = { true })
+        transport.send(
+            AlertPayload.MediaAlert(
+                SensorType.CAMERA_MOTION, "Motion",
+                MediaFile(blob.absolutePath, MediaStorageRepositoryImpl.MIME_AGE, 5L, 1_700_000_000_000L),
+                1_700_000_000_000L
+            )
+        ).getOrThrow()
+
+        val sent = ntfyServer.topics[alerts.topic]!!.single()
+        assertEquals("neruppu://capture?f=1700000000000.age", sent.click)
+        assertEquals(
+            "view, View capture, neruppu://capture?f=1700000000000.age; view, Take photo, neruppu://photo",
+            sent.actions
+        )
+
+        val link = RemoteLink.parse(sent.click) as RemoteLink.Capture
+        val photo = remote.openAlertCapture(link.fileName).getOrThrow()
+        assertArrayEquals(jpeg, photo.jpeg)
+        assertEquals(1_700_000_000_000L, photo.at)
+
+        assertTrue(remote.openAlertCapture("1.age").isFailure)
+    }
+
+    @Test
+    fun `TC-RC-19 links carry no URL and odd links are refused`() {
+        assertEquals(RemoteLink.Open, RemoteLink.parse("neruppu://remote"))
+        assertEquals(RemoteLink.Photo, RemoteLink.parse("neruppu://photo"))
+        assertEquals(RemoteLink.Capture("12.age"), RemoteLink.parse("neruppu://capture?f=12.age"))
+        assertNull(RemoteLink.parse("neruppu://capture?f=../x.age"))
+        assertNull(RemoteLink.parse("neruppu://capture?f=https://evil/1.age"))
+        assertNull(RemoteLink.parse("https://remote"))
+        assertNull(RemoteLink.parse("neruppu://disarm"))
+        assertNull(RemoteLink.capture("photo.jpg"))
     }
 }
