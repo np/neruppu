@@ -33,8 +33,11 @@ import javax.inject.Singleton
 interface GuardDevice {
     suspend fun status(): RemoteStatus
     /** Plain JPEG, held in memory only; null if the camera is unavailable. */
-    suspend fun takePhoto(): ByteArray?
+    suspend fun takePhoto(): GuardPhoto?
 }
+
+/** [dark]: still nearly black after metering (dark room, covered lens, camera access off). */
+class GuardPhoto(val jpeg: ByteArray, val dark: Boolean = false)
 
 /** Guarded-phone side: listens for commands while guarding. */
 interface RemoteGuard {
@@ -76,9 +79,9 @@ class RemoteGuardHandler(
                     return GuardReply.Text(seal(response(command, "error", error = "Too many photo requests, wait a few seconds")))
                 }
                 lastPhotoAt = now
-                val jpeg = device.takePhoto()
+                val photo = device.takePhoto()
                     ?: return GuardReply.Text(seal(response(command, "error", error = "Camera unavailable")))
-                GuardReply.File(encrypt(jpeg), "${command.id}.age", seal(response(command, "photo")))
+                GuardReply.File(encrypt(photo.jpeg), "${command.id}.age", seal(response(command, "photo", dark = photo.dark)))
             }
             else -> GuardReply.Text(seal(response(command, "error", error = "Unknown command")))
         }
@@ -88,14 +91,16 @@ class RemoteGuardHandler(
         command: RemoteProtocol.Command,
         kind: String,
         status: RemoteProtocol.Status? = null,
-        error: String? = null
+        error: String? = null,
+        dark: Boolean = false
     ) = RemoteProtocol.Response(
         id = UUID.randomUUID().toString(),
         ts = clock(),
         re = command.id,
         kind = kind,
         status = status,
-        error = error
+        error = error,
+        dark = dark
     )
 
     private fun seal(response: RemoteProtocol.Response) = RemoteProtocol.seal(

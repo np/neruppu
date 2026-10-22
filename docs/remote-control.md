@@ -81,6 +81,10 @@ pairing code, creating it and sending settings ask too.
   with age to the guarded phone's keys (which include the remote's), named
   `<command id>.age`. The remote downloads and decrypts it.
 - At most one photo every 5 seconds.
+- Before a photo the guarded phone meters exposure on the centre of the frame;
+  if the picture is still nearly black (mean luma < 16/255) it retakes it once
+  after 1.5 s, and the answer carries `"dark":true` so the remote can say why
+  (dark room, covered lens, camera access turned off in quick settings).
 
 ## Availability
 

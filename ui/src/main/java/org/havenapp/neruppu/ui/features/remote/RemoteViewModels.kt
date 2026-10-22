@@ -139,6 +139,7 @@ data class RemoteControlUiState(
     val statusAt: Long? = null,
     val photo: ByteArray? = null,
     val photoAt: Long? = null,
+    val photoDark: Boolean = false,
     val waitingFor: RemoteCommand? = null,
     val error: String? = null,
     val locked: Boolean = true
@@ -173,7 +174,7 @@ class RemoteControlViewModel @Inject constructor(
                             waitingFor = state.waitingFor.takeIf { it != RemoteCommand.STATUS }
                         )
                         is RemoteUpdate.Photo -> state.copy(
-                            photo = update.jpeg, photoAt = update.at, error = null,
+                            photo = update.jpeg, photoAt = update.at, photoDark = update.dark, error = null,
                             waitingFor = state.waitingFor.takeIf { it != RemoteCommand.PHOTO }
                         )
                         is RemoteUpdate.Failure -> state.copy(error = update.message, waitingFor = null)

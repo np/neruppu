@@ -18,6 +18,7 @@
 package org.havenapp.neruppu.data.camera
 
 import android.content.Context
+import android.graphics.BitmapFactory
 import android.util.Log
 import android.util.Size
 import androidx.camera.core.*
@@ -27,13 +28,16 @@ import androidx.camera.core.resolutionselector.AspectRatioStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.havenapp.neruppu.data.camera.analyzer.MotionAnalyzer
 import org.havenapp.neruppu.data.camera.analyzer.ContextBatteryLevelProvider
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 
 class CameraManager(private val context: Context) {
@@ -41,6 +45,7 @@ class CameraManager(private val context: Context) {
     private var imageCapture: ImageCapture? = null
     private var imageAnalysis: ImageAnalysis? = null
     private var motionAnalyzer: MotionAnalyzer? = null
+    private var camera: Camera? = null
      
     private val mutex = Mutex()
     private var cameraExecutor: ExecutorService = Executors.newSingleThreadExecutor()
@@ -103,6 +108,43 @@ class CameraManager(private val context: Context) {
                     }
                 }
             )
+        }
+    }
+
+    /**
+     * A photo asked for on purpose (remote control): exposure is metered on
+     * the centre first, and a nearly black result is retaken once after the
+     * exposure has had time to settle. [dark] tells the caller it still is.
+     */
+    suspend fun captureMeteredPhoto(): MeteredPhoto? {
+        meterCentre()
+        var jpeg = capturePhotoBytes() ?: return null
+        var brightness = meanBrightness(jpeg)
+        if (brightness in 0 until DARK_BRIGHTNESS) {
+            delay(RETAKE_DELAY_MS)
+            meterCentre()
+            capturePhotoBytes()?.let { retaken ->
+                val b = meanBrightness(retaken)
+                if (b > brightness) { jpeg = retaken; brightness = b }
+            }
+        }
+        Log.d("CameraManager", "Metered photo: brightness $brightness")
+        return MeteredPhoto(jpeg, dark = brightness in 0 until DARK_BRIGHTNESS)
+    }
+
+    class MeteredPhoto(val jpeg: ByteArray, val dark: Boolean)
+
+    private suspend fun meterCentre() {
+        val control = camera?.cameraControl ?: return
+        val point = SurfaceOrientedMeteringPointFactory(1f, 1f).createPoint(0.5f, 0.5f)
+        val action = FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AE or FocusMeteringAction.FLAG_AF)
+            .setAutoCancelDuration(3, TimeUnit.SECONDS)
+            .build()
+        withTimeoutOrNull(METERING_TIMEOUT_MS) {
+            suspendCancellableCoroutine { continuation ->
+                val future = control.startFocusAndMetering(action)
+                future.addListener({ if (continuation.isActive) continuation.resume(Unit) }, ContextCompat.getMainExecutor(context))
+            }
         }
     }
 
@@ -178,7 +220,7 @@ class CameraManager(private val context: Context) {
                     CameraSelector.DEFAULT_BACK_CAMERA
                 }
 
-                cameraProvider.bindToLifecycle(
+                camera = cameraProvider.bindToLifecycle(
                     lifecycleOwner,
                     cameraSelector,
                     *useCases.toTypedArray()
@@ -203,6 +245,7 @@ class CameraManager(private val context: Context) {
             currentCameraSide = null
             currentLifecycleOwner = null
             imageCapture = null
+            camera = null
             imageAnalysis?.clearAnalyzer()
             imageAnalysis = null
             motionAnalyzer?.cleanup()
@@ -215,6 +258,27 @@ class CameraManager(private val context: Context) {
     fun release() {
         if (!cameraExecutor.isShutdown) {
             cameraExecutor.shutdown()
+        }
+    }
+
+    companion object {
+        /** Mean luma (0–255) under which a photo counts as black. */
+        const val DARK_BRIGHTNESS = 16
+        private const val RETAKE_DELAY_MS = 1_500L
+        private const val METERING_TIMEOUT_MS = 2_000L
+
+        /** Mean luma of a heavily downsampled decode, or -1 if it does not decode. */
+        fun meanBrightness(jpeg: ByteArray): Int {
+            val options = BitmapFactory.Options().apply { inSampleSize = 16 }
+            val bitmap = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size, options) ?: return -1
+            val pixels = IntArray(bitmap.width * bitmap.height)
+            bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+            bitmap.recycle()
+            if (pixels.isEmpty()) return -1
+            val sum = pixels.sumOf { p ->
+                (299 * ((p shr 16) and 0xFF) + 587 * ((p shr 8) and 0xFF) + 114 * (p and 0xFF)).toLong()
+            }
+            return (sum / 1000 / pixels.size).toInt()
         }
     }
 }

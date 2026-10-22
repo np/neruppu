@@ -47,7 +47,8 @@ data class RemoteStatus(
 sealed class RemoteUpdate {
     data class Connected(val connected: Boolean) : RemoteUpdate()
     data class Status(val at: Long, val status: RemoteStatus) : RemoteUpdate()
-    class Photo(val at: Long, val jpeg: ByteArray) : RemoteUpdate()
+    /** [dark]: the guarded phone found it nearly black even after metering. */
+    class Photo(val at: Long, val jpeg: ByteArray, val dark: Boolean = false) : RemoteUpdate()
     data class Failure(val at: Long, val message: String) : RemoteUpdate()
 }
 

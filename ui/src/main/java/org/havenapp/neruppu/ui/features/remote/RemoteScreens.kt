@@ -443,6 +443,14 @@ private fun UnlockedRemote(state: RemoteControlUiState, viewModel: RemoteControl
                 state.photoAt?.let {
                     Text("Taken ${formatTime(it)}", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
                 }
+                if (state.photoDark) {
+                    Text(
+                        "The photo is almost black: the room is dark, the lens is covered or facing down, " +
+                            "or camera access is turned off in the guarded phone's quick settings.",
+                        color = NeruppuAmber,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
         }
     }

@@ -129,7 +129,9 @@ object RemoteProtocol {
         /** "status", "photo" or "error". */
         val kind: String,
         val status: Status? = null,
-        val error: String? = null
+        val error: String? = null,
+        /** Photo answers: the picture is nearly black. */
+        val dark: Boolean = false
     )
 
     @Serializable

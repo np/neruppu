@@ -176,7 +176,7 @@ class RemoteControlRepositoryImpl @Inject constructor(
                 ?: RemoteUpdate.Failure(response.ts, "Empty status")
             "photo" -> runCatching {
                 val url = checkNotNull(event.attachment?.url) { "Photo missing (attachment expired?)" }
-                RemoteUpdate.Photo(response.ts, keyring.decrypt(ntfy.download(url), identity))
+                RemoteUpdate.Photo(response.ts, keyring.decrypt(ntfy.download(url), identity), response.dark)
             }.getOrElse { RemoteUpdate.Failure(response.ts, it.message ?: "Photo could not be opened") }
             else -> RemoteUpdate.Failure(response.ts, response.error ?: "Error on the guarded phone")
         }

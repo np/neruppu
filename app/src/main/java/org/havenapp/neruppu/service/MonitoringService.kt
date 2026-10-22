@@ -53,6 +53,7 @@ import org.havenapp.neruppu.domain.model.SensorEvent
 import org.havenapp.neruppu.domain.model.AlertTarget
 import org.havenapp.neruppu.domain.repository.AlertTargetRepository
 import org.havenapp.neruppu.data.remote.GuardDevice
+import org.havenapp.neruppu.data.remote.GuardPhoto
 import org.havenapp.neruppu.data.remote.RemoteGuard
 import org.havenapp.neruppu.domain.remote.RemoteStatus
 import org.havenapp.neruppu.domain.repository.EncryptionKeyRepository
@@ -776,8 +777,8 @@ class MonitoringService : LifecycleService() {
 
         // Only while guarding: the camera is bound then. The photo is not an
         // event and is not stored; it leaves the phone age-encrypted.
-        override suspend fun takePhoto(): ByteArray? =
-            if (_isMonitoring.value) cameraManager.capturePhotoBytes() else null
+        override suspend fun takePhoto(): GuardPhoto? =
+            if (_isMonitoring.value) cameraManager.captureMeteredPhoto()?.let { GuardPhoto(it.jpeg, it.dark) } else null
     }
 
     private fun postEventNotification(type: SensorType, description: String) {

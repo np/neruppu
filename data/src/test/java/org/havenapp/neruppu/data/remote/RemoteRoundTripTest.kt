@@ -132,7 +132,8 @@ class RemoteRoundTripTest {
 
     private val device = object : GuardDevice {
         override suspend fun status() = status
-        override suspend fun takePhoto() = jpeg
+        // Nearly black: the remote must be told so.
+        override suspend fun takePhoto() = GuardPhoto(jpeg, dark = true)
     }
 
     @Test
@@ -177,6 +178,7 @@ class RemoteRoundTripTest {
         updates.first { received += it; received.size == 2 }
         assertEquals(status, (received[0] as RemoteUpdate.Status).status)
         assertArrayEquals(jpeg, (received[1] as RemoteUpdate.Photo).jpeg)
+        assertTrue((received[1] as RemoteUpdate.Photo).dark)
     }
 
     @Test
