@@ -441,7 +441,12 @@ private fun UnlockedRemote(state: RemoteControlUiState, viewModel: RemoteControl
                     )
                 }
                 state.photoAt?.let {
-                    Text("Taken ${formatTime(it)}", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+                    val camera = when (state.photoFrontCamera) {
+                        true -> " · front camera"
+                        false -> " · back camera"
+                        null -> ""
+                    }
+                    Text("Taken ${formatTime(it)}$camera", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
                 }
                 if (state.photoDark) {
                     Text(
@@ -505,6 +510,20 @@ private fun StatusCard(status: RemoteStatus?, at: Long?) {
             Text(label, color = color, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
             status.guardingSince?.let {
                 Text("Since ${formatTime(it)}", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+            }
+            status.frontCamera?.let { front ->
+                Text(
+                    if (front) "Front camera (screen side)" else "Back camera",
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            if (status.cameraBlack) {
+                Text(
+                    "The camera sees only black: camera access may be off in its quick settings, or the lens is covered.",
+                    color = NeruppuAmber,
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
             val battery = if (status.batteryPercent >= 0) "${status.batteryPercent} %" else "?"
             Text(

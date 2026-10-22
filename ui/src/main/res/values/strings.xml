@@ -29,6 +29,18 @@
     <string name="start_warning_no_internet_body">Events will be recorded on this device, but alerts will only be sent once the connection is back.</string>
     <string name="start_warning_not_charging_title">Not plugged in</string>
     <string name="start_warning_not_charging_body">Camera and microphone drain the battery: guarding may stop within a few hours.</string>
+    <string name="start_warning_camera_black_title">The camera sees only black</string>
+    <string name="start_warning_camera_black_body">Camera access may be turned off in quick settings (Android then sends black images without any error), or the lens is covered. Check with Test photo.</string>
+    <string name="camera_back_in_use">Back camera</string>
+    <string name="camera_front_in_use">Front camera (screen side)</string>
+    <string name="camera_back">Back</string>
+    <string name="camera_front">Front</string>
+    <string name="camera_back_hint">Lay the phone screen up, or stand it with the back facing the room.</string>
+    <string name="camera_front_hint">Stand the phone with the screen facing the room.</string>
+    <string name="camera_test_photo">Test photo</string>
+    <string name="camera_test_failed">The camera did not answer. Try again in a few seconds.</string>
+    <string name="camera_test_not_saved">Only shown here: not saved, not sent.</string>
+    <string name="camera_test_close">Close</string>
     <string name="start_warning_start_anyway">Start anyway</string>
     <string name="start_warning_cancel">Cancel</string>
 </resources>

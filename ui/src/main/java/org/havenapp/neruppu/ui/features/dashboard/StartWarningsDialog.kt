@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -56,6 +57,7 @@ import org.havenapp.neruppu.ui.R
 fun StartWarningsDialog(
     noInternet: Boolean,
     notCharging: Boolean,
+    cameraBlack: Boolean = false,
     onStartAnyway: () -> Unit,
     onCancel: () -> Unit
 ) {
@@ -72,6 +74,13 @@ fun StartWarningsDialog(
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                if (cameraBlack) {
+                    WarningRow(
+                        Icons.Default.VideocamOff,
+                        stringResource(R.string.start_warning_camera_black_title),
+                        stringResource(R.string.start_warning_camera_black_body)
+                    )
+                }
                 if (noInternet) {
                     WarningRow(
                         Icons.Default.CloudOff,

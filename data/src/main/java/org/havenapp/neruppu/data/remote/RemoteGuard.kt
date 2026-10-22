@@ -37,7 +37,7 @@ interface GuardDevice {
 }
 
 /** [dark]: still nearly black after metering (dark room, covered lens, camera access off). */
-class GuardPhoto(val jpeg: ByteArray, val dark: Boolean = false)
+class GuardPhoto(val jpeg: ByteArray, val dark: Boolean = false, val frontCamera: Boolean? = null)
 
 /** Guarded-phone side: listens for commands while guarding. */
 interface RemoteGuard {
@@ -81,7 +81,7 @@ class RemoteGuardHandler(
                 lastPhotoAt = now
                 val photo = device.takePhoto()
                     ?: return GuardReply.Text(seal(response(command, "error", error = "Camera unavailable")))
-                GuardReply.File(encrypt(photo.jpeg), "${command.id}.age", seal(response(command, "photo", dark = photo.dark)))
+                GuardReply.File(encrypt(photo.jpeg), "${command.id}.age", seal(response(command, "photo", dark = photo.dark, front = photo.frontCamera)))
             }
             else -> GuardReply.Text(seal(response(command, "error", error = "Unknown command")))
         }
@@ -92,7 +92,8 @@ class RemoteGuardHandler(
         kind: String,
         status: RemoteProtocol.Status? = null,
         error: String? = null,
-        dark: Boolean = false
+        dark: Boolean = false,
+        front: Boolean? = null
     ) = RemoteProtocol.Response(
         id = UUID.randomUUID().toString(),
         ts = clock(),
@@ -100,7 +101,8 @@ class RemoteGuardHandler(
         kind = kind,
         status = status,
         error = error,
-        dark = dark
+        dark = dark,
+        front = front
     )
 
     private fun seal(response: RemoteProtocol.Response) = RemoteProtocol.seal(
@@ -120,7 +122,9 @@ internal fun RemoteStatus.toWire() = RemoteProtocol.Status(
     battery = batteryPercent,
     plugged = pluggedIn,
     lastEventAt = lastEventAt,
-    lastEventType = lastEventType
+    lastEventType = lastEventType,
+    front = frontCamera,
+    cameraBlack = cameraBlack
 )
 
 internal fun RemoteProtocol.Status.toDomain() = RemoteStatus(
@@ -131,7 +135,9 @@ internal fun RemoteProtocol.Status.toDomain() = RemoteStatus(
     batteryPercent = battery,
     pluggedIn = plugged,
     lastEventAt = lastEventAt,
-    lastEventType = lastEventType
+    lastEventType = lastEventType,
+    frontCamera = front,
+    cameraBlack = cameraBlack
 )
 
 @Singleton

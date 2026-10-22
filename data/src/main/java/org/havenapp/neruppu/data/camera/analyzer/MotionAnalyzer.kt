@@ -51,7 +51,8 @@ class ContextBatteryLevelProvider(private val context: Context) : BatteryLevelPr
 class MotionAnalyzer(
     private val onMotionDetected: (Double) -> Unit,
     private val sensitivity: Int = 15,
-    private val batteryLevelProvider: BatteryLevelProvider = DefaultBatteryLevelProvider
+    private val batteryLevelProvider: BatteryLevelProvider = DefaultBatteryLevelProvider,
+    private val blackFeed: BlackFeedDetector? = null
 ) : ImageAnalysis.Analyzer {
 
     internal var referenceBuffer: ByteArray? = null
@@ -96,6 +97,8 @@ class MotionAnalyzer(
 
         var changedPixels = 0
         var totalSampled = 0
+        var minLuma = 255
+        var maxLuma = 0
 
         val xStep = width / outWidth
         val yStep = height / outHeight
@@ -108,6 +111,8 @@ class MotionAnalyzer(
                 
                 if (srcIndex < buffer.capacity()) {
                     val currentVal = buffer.get(srcIndex).toInt() and 0xFF
+                    if (currentVal < minLuma) minLuma = currentVal
+                    if (currentVal > maxLuma) maxLuma = currentVal
                     val refIndex = srcY * width + srcX
                     val referenceVal = ref[refIndex].toInt() and 0xFF
                     
@@ -128,6 +133,7 @@ class MotionAnalyzer(
 
         val motionLevel = if (totalSampled > 0) (changedPixels.toDouble() / totalSampled) * 100.0 else 0.0
         onMotionDetected(motionLevel)
+        if (totalSampled > 0) blackFeed?.onFrame(minLuma, maxLuma, now)
 
         image.close()
     }

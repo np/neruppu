@@ -33,7 +33,9 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import org.havenapp.neruppu.data.camera.analyzer.BlackFeedDetector
 import org.havenapp.neruppu.data.camera.analyzer.MotionAnalyzer
+import kotlinx.coroutines.flow.StateFlow
 import org.havenapp.neruppu.data.camera.analyzer.ContextBatteryLevelProvider
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -46,6 +48,10 @@ class CameraManager(private val context: Context) {
     private var imageAnalysis: ImageAnalysis? = null
     private var motionAnalyzer: MotionAnalyzer? = null
     private var camera: Camera? = null
+    private val blackFeed = BlackFeedDetector()
+
+    /** The bound camera has sent only uniformly black frames for a few seconds. */
+    val feedBlack: StateFlow<Boolean> = blackFeed.black
      
     private val mutex = Mutex()
     private var cameraExecutor: ExecutorService = Executors.newSingleThreadExecutor()
@@ -171,6 +177,7 @@ class CameraManager(private val context: Context) {
         getCameraProvider { cameraProvider ->
             try {
                 cameraProvider.unbindAll()
+                blackFeed.reset()
                 
                 val useCases = mutableListOf<androidx.camera.core.UseCase>()
 
@@ -203,7 +210,8 @@ class CameraManager(private val context: Context) {
                 motionAnalyzer = MotionAnalyzer(
                     onMotionDetected,
                     sensitivity,
-                    ContextBatteryLevelProvider(context)
+                    ContextBatteryLevelProvider(context),
+                    blackFeed
                 )
                 imageAnalysis = ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
@@ -246,6 +254,7 @@ class CameraManager(private val context: Context) {
             currentLifecycleOwner = null
             imageCapture = null
             camera = null
+            blackFeed.reset()
             imageAnalysis?.clearAnalyzer()
             imageAnalysis = null
             motionAnalyzer?.cleanup()

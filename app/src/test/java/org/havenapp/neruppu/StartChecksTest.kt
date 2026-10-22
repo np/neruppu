@@ -46,4 +46,12 @@ class StartChecksTest {
             StartChecks.evaluate(hasInternet = false, isPluggedIn = false, alertChannelActive = false)
         )
     }
+
+    @Test
+    fun `TC-START-04 a black camera feed comes first`() {
+        assertEquals(
+            listOf(StartWarning.CAMERA_BLACK, StartWarning.NOT_CHARGING),
+            StartChecks.evaluate(hasInternet = true, isPluggedIn = false, alertChannelActive = true, cameraBlack = true)
+        )
+    }
 }

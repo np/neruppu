@@ -25,23 +25,30 @@ import android.net.NetworkCapabilities
 import android.os.BatteryManager
 
 /** Conditions worth a warning before guarding starts; none of them blocks it. */
-enum class StartWarning { NO_INTERNET, NOT_CHARGING }
+enum class StartWarning { NO_INTERNET, NOT_CHARGING, CAMERA_BLACK }
 
 object StartChecks {
 
-    fun warnings(context: Context, alertChannelActive: Boolean): List<StartWarning> =
+    fun warnings(context: Context, alertChannelActive: Boolean, cameraBlack: Boolean): List<StartWarning> =
         evaluate(
             hasInternet = hasValidatedInternet(context),
             isPluggedIn = isPluggedIn(context),
-            alertChannelActive = alertChannelActive
+            alertChannelActive = alertChannelActive,
+            cameraBlack = cameraBlack
         )
 
     /**
      * Without an alert channel nothing is sent anyway (offline-first), so the
      * lack of internet is only worth a warning when one is configured.
      */
-    fun evaluate(hasInternet: Boolean, isPluggedIn: Boolean, alertChannelActive: Boolean): List<StartWarning> =
+    fun evaluate(
+        hasInternet: Boolean,
+        isPluggedIn: Boolean,
+        alertChannelActive: Boolean,
+        cameraBlack: Boolean = false
+    ): List<StartWarning> =
         buildList {
+            if (cameraBlack) add(StartWarning.CAMERA_BLACK)
             if (alertChannelActive && !hasInternet) add(StartWarning.NO_INTERNET)
             if (!isPluggedIn) add(StartWarning.NOT_CHARGING)
         }

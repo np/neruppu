@@ -17,6 +17,8 @@
 
 package org.havenapp.neruppu
 
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import android.Manifest
 import android.content.*
 import android.content.pm.PackageManager
@@ -318,6 +320,8 @@ class MainActivity : FragmentActivity() {
                             val sessionStartTime by service.sessionStartTime.collectAsState()
                             val lastGuardedTime by service.lastGuardedTime.collectAsState()
                             val armedAtElapsed by service.armedAtElapsed.collectAsState()
+                            val cameraBlack by service.cameraBlack.collectAsState()
+                            val scope = rememberCoroutineScope()
                             var startWarnings by remember { mutableStateOf<List<StartWarning>>(emptyList()) }
 
                             val startGuarding = {
@@ -329,6 +333,7 @@ class MainActivity : FragmentActivity() {
                                 StartWarningsDialog(
                                     noInternet = StartWarning.NO_INTERNET in startWarnings,
                                     notCharging = StartWarning.NOT_CHARGING in startWarnings,
+                                    cameraBlack = StartWarning.CAMERA_BLACK in startWarnings,
                                     onStartAnyway = {
                                         startWarnings = emptyList()
                                         startGuarding()
@@ -353,7 +358,8 @@ class MainActivity : FragmentActivity() {
                                             withGuardPermissions {
                                                 val warnings = StartChecks.warnings(
                                                     context,
-                                                    alertChannelActive = alertTargetRepository.activeTarget != AlertTarget.NONE
+                                                    alertChannelActive = alertTargetRepository.activeTarget != AlertTarget.NONE,
+                                                    cameraBlack = service.cameraBlack.value
                                                 )
                                                 if (warnings.isNotEmpty()) {
                                                     startWarnings = warnings
@@ -366,6 +372,13 @@ class MainActivity : FragmentActivity() {
                                         }
                                     },
                                 useFrontCamera = useFrontCamera,
+                                onSelectCamera = { front ->
+                                    useFrontCamera = front
+                                    // MonitoringService rebinds the camera on this change.
+                                    prefs.edit().putBoolean("use_front_camera", front).apply()
+                                },
+                                cameraBlack = cameraBlack,
+                                onTestPhoto = { onResult -> scope.launch { onResult(service.testPhoto()) } },
                                 encryptionConfigured = encryptionUiState.isConfigured,
                                 permissionsMissing = !hasGuardPermissions,
                                 onGrantPermissions = { withGuardPermissions {} },

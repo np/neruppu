@@ -41,14 +41,18 @@ data class RemoteStatus(
     val batteryPercent: Int,
     val pluggedIn: Boolean,
     val lastEventAt: Long?,
-    val lastEventType: String?
+    val lastEventType: String?,
+    /** Which camera guards; null from an older guarded phone. */
+    val frontCamera: Boolean? = null,
+    /** The camera sends only black frames (camera access off, lens covered). */
+    val cameraBlack: Boolean = false
 )
 
 sealed class RemoteUpdate {
     data class Connected(val connected: Boolean) : RemoteUpdate()
     data class Status(val at: Long, val status: RemoteStatus) : RemoteUpdate()
     /** [dark]: the guarded phone found it nearly black even after metering. */
-    class Photo(val at: Long, val jpeg: ByteArray, val dark: Boolean = false) : RemoteUpdate()
+    class Photo(val at: Long, val jpeg: ByteArray, val dark: Boolean = false, val frontCamera: Boolean? = null) : RemoteUpdate()
     data class Failure(val at: Long, val message: String) : RemoteUpdate()
 }
 

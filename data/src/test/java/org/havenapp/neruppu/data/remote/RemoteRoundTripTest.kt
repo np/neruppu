@@ -126,14 +126,15 @@ class RemoteRoundTripTest {
 
     private val status = RemoteStatus(
         monitoring = true, armed = true, armingRemainingSeconds = 0, guardingSince = 1L,
-        batteryPercent = 64, pluggedIn = false, lastEventAt = null, lastEventType = null
+        batteryPercent = 64, pluggedIn = false, lastEventAt = null, lastEventType = null,
+        frontCamera = true, cameraBlack = true
     )
     private val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 1, 2, 3)
 
     private val device = object : GuardDevice {
         override suspend fun status() = status
         // Nearly black: the remote must be told so.
-        override suspend fun takePhoto() = GuardPhoto(jpeg, dark = true)
+        override suspend fun takePhoto() = GuardPhoto(jpeg, dark = true, frontCamera = true)
     }
 
     @Test
@@ -179,6 +180,7 @@ class RemoteRoundTripTest {
         assertEquals(status, (received[0] as RemoteUpdate.Status).status)
         assertArrayEquals(jpeg, (received[1] as RemoteUpdate.Photo).jpeg)
         assertTrue((received[1] as RemoteUpdate.Photo).dark)
+        assertEquals(true, (received[1] as RemoteUpdate.Photo).frontCamera)
     }
 
     @Test

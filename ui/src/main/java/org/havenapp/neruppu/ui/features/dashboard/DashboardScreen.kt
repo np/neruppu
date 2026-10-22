@@ -74,7 +74,11 @@ fun DashboardScreen(
     permissionsMissing: Boolean = false,
     onGrantPermissions: () -> Unit = {},
     // SystemClock.elapsedRealtime() at which the exit delay ends; 0 when idle
-    armedAtElapsed: Long = 0L
+    armedAtElapsed: Long = 0L,
+    onSelectCamera: (front: Boolean) -> Unit = {},
+    // Only uniformly black frames: camera access off in quick settings, or lens covered
+    cameraBlack: Boolean = false,
+    onTestPhoto: (onResult: (ByteArray?) -> Unit) -> Unit = { it(null) }
 ) {
     Box(
         modifier = Modifier
@@ -128,6 +132,17 @@ fun DashboardScreen(
                         
                         Spacer(modifier = Modifier.height(16.dp))
 
+                        CameraCard(
+                            frontCamera = useFrontCamera,
+                            isMonitoring = true,
+                            cameraBlack = cameraBlack,
+                            canTest = true,
+                            onSelectCamera = onSelectCamera,
+                            onTestPhoto = onTestPhoto
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
                         SensorGrid(
                             motionLevel = motionLevel,
                             audioLevel = audioLevel,
@@ -138,6 +153,14 @@ fun DashboardScreen(
                 } else {
                     // Space for starting the monitoring
                     Spacer(modifier = Modifier.weight(1f))
+                    CameraCard(
+                        frontCamera = useFrontCamera,
+                        isMonitoring = false,
+                        cameraBlack = cameraBlack,
+                        canTest = !permissionsMissing,
+                        onSelectCamera = onSelectCamera,
+                        onTestPhoto = onTestPhoto
+                    )
                 }
                 
                 Spacer(modifier = Modifier.height(12.dp))

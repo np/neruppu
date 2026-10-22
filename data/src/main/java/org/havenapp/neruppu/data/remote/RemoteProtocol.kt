@@ -131,7 +131,9 @@ object RemoteProtocol {
         val status: Status? = null,
         val error: String? = null,
         /** Photo answers: the picture is nearly black. */
-        val dark: Boolean = false
+        val dark: Boolean = false,
+        /** Photo answers: taken with the front camera. */
+        val front: Boolean? = null
     )
 
     @Serializable
@@ -143,7 +145,9 @@ object RemoteProtocol {
         val battery: Int,
         val plugged: Boolean,
         val lastEventAt: Long? = null,
-        val lastEventType: String? = null
+        val lastEventType: String? = null,
+        val front: Boolean? = null,
+        val cameraBlack: Boolean = false
     )
 }
 

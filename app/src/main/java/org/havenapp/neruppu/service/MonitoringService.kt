@@ -114,6 +114,16 @@ class MonitoringService : LifecycleService() {
     private val _lightLevel = MutableStateFlow(0f)
     val lightLevel: StateFlow<Float> = _lightLevel
 
+    /** Only uniformly black frames: camera access off in quick settings, or lens covered. */
+    val cameraBlack: StateFlow<Boolean> get() = cameraManager.feedBlack
+
+    /**
+     * A photo to check what the camera sees, shown on this screen only:
+     * never stored or sent. Null when the camera is not bound.
+     */
+    suspend fun testPhoto(): ByteArray? =
+        if (cameraManager.isBound) cameraManager.captureMeteredPhoto()?.jpeg else null
+
     private val _isMonitoring = MutableStateFlow(false)
     val isMonitoring: StateFlow<Boolean> = _isMonitoring
 
@@ -771,14 +781,18 @@ class MonitoringService : LifecycleService() {
                 batteryPercent = if (level >= 0 && scale > 0) level * 100 / scale else -1,
                 pluggedIn = (battery?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0,
                 lastEventAt = lastEventAt,
-                lastEventType = lastEventType?.name
+                lastEventType = lastEventType?.name,
+                frontCamera = useFrontCameraPref,
+                cameraBlack = cameraManager.feedBlack.value
             )
         }
 
         // Only while guarding: the camera is bound then. The photo is not an
         // event and is not stored; it leaves the phone age-encrypted.
         override suspend fun takePhoto(): GuardPhoto? =
-            if (_isMonitoring.value) cameraManager.captureMeteredPhoto()?.let { GuardPhoto(it.jpeg, it.dark) } else null
+            if (_isMonitoring.value) {
+                cameraManager.captureMeteredPhoto()?.let { GuardPhoto(it.jpeg, it.dark, useFrontCameraPref) }
+            } else null
     }
 
     private fun postEventNotification(type: SensorType, description: String) {
