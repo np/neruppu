@@ -43,6 +43,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.OpenWith
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Error
@@ -116,6 +117,8 @@ fun SettingsScreen(
     onSoundToggle: (Boolean) -> Unit,
     lightEnabled: Boolean,
     onLightToggle: (Boolean) -> Unit,
+    movementEnabled: Boolean = true,
+    onMovementToggle: (Boolean) -> Unit = {},
     motionSensitivity: Float,
     onMotionSensitivityChange: (Float) -> Unit,
     soundThreshold: Float,
@@ -276,14 +279,14 @@ fun SettingsScreen(
                     SettingRow(
                         icon = Icons.Default.CameraAlt,
                         label = "Motion detection",
-                        subLabel = "CameraX analysis",
+                        subLabel = "Movement in the camera picture",
                         checked = motionEnabled,
                         onCheckedChange = onMotionToggle
                     )
                     SettingRow(
                         icon = Icons.Default.Mic,
                         label = "Acoustic monitor",
-                        subLabel = "Mic level tracking",
+                        subLabel = "Loud noises (microphone)",
                         checked = soundEnabled,
                         onCheckedChange = onSoundToggle
                     )
@@ -293,6 +296,13 @@ fun SettingsScreen(
                         subLabel = "Ambient light sensor",
                         checked = lightEnabled,
                         onCheckedChange = onLightToggle
+                    )
+                    SettingRow(
+                        icon = Icons.Default.OpenWith,
+                        label = "Phone moved",
+                        subLabel = "Picked up or shaken (accelerometer)",
+                        checked = movementEnabled,
+                        onCheckedChange = onMovementToggle
                     )
                 }
 
@@ -316,7 +326,7 @@ fun SettingsScreen(
                         label = "Sound threshold",
                         value = soundThreshold,
                         onValueChange = onSoundThresholdChange,
-                        displayValue = "${(soundThreshold * 100).toInt()} dB",
+                        displayValue = if (soundThreshold < 0.3f) "Low" else if (soundThreshold < 0.7f) "Medium" else "High",
                         color = NeruppuBlue
                     )
                 }

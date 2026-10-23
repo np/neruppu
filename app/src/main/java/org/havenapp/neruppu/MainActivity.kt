@@ -57,6 +57,7 @@ import org.havenapp.neruppu.core.ui.theme.TextPrimary
 import org.havenapp.neruppu.core.ui.theme.TextSecondary
 import org.havenapp.neruppu.data.local.SharedPrefsAlertGroupingStore
 import org.havenapp.neruppu.service.MonitoringService
+import org.havenapp.neruppu.service.SensorSettings
 import org.havenapp.neruppu.domain.model.AlertTarget
 import org.havenapp.neruppu.domain.repository.AlertTargetRepository
 import androidx.compose.material.icons.filled.Phone
@@ -244,8 +245,15 @@ class MainActivity : FragmentActivity() {
         var motionEnabled by remember(settingsVersion) { mutableStateOf(prefs.getBoolean("motion_enabled", true)) }
         var soundEnabled by remember(settingsVersion) { mutableStateOf(prefs.getBoolean("sound_enabled", true)) }
         var lightEnabled by remember(settingsVersion) { mutableStateOf(prefs.getBoolean("light_enabled", false)) }
-        var motionSensitivity by remember(settingsVersion) { mutableStateOf(prefs.getFloat("motion_sensitivity", 0.5f)) }
-        var soundThreshold by remember(settingsVersion) { mutableStateOf(prefs.getFloat("sound_threshold", 0.6f)) }
+        var movementEnabled by remember(settingsVersion) {
+            mutableStateOf(prefs.getBoolean(SensorSettings.KEY_MOVEMENT, true))
+        }
+        var motionSensitivity by remember(settingsVersion) {
+            mutableStateOf(prefs.getFloat(SensorSettings.KEY_MOTION_THRESHOLD, SensorSettings.DEFAULT_MOTION_THRESHOLD))
+        }
+        var soundThreshold by remember(settingsVersion) {
+            mutableStateOf(prefs.getFloat(SensorSettings.KEY_SOUND_THRESHOLD, SensorSettings.DEFAULT_SOUND_THRESHOLD))
+        }
         var pushAlerts by remember(settingsVersion) { mutableStateOf(prefs.getBoolean("push_alerts", true)) }
         var savePhotos by remember(settingsVersion) { mutableStateOf(prefs.getBoolean("save_photos", true)) }
         var useFrontCamera by remember(settingsVersion) { mutableStateOf(prefs.getBoolean("use_front_camera", false)) }
@@ -444,6 +452,11 @@ class MainActivity : FragmentActivity() {
                             onLightToggle = {
                                 lightEnabled = it
                                 prefs.edit().putBoolean("light_enabled", it).apply()
+                            },
+                            movementEnabled = movementEnabled,
+                            onMovementToggle = {
+                                movementEnabled = it
+                                prefs.edit().putBoolean(SensorSettings.KEY_MOVEMENT, it).apply()
                             },
                             motionSensitivity = motionSensitivity,
                             onMotionSensitivityChange = {

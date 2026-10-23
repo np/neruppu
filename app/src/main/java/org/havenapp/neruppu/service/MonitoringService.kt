@@ -167,31 +167,44 @@ class MonitoringService : LifecycleService() {
         prefChangeJob = serviceScope.launch {
             delay(500) // debounce
             when (key) {
-                "motion_sensitivity", "use_front_camera" -> {
+                SensorSettings.KEY_MOTION_THRESHOLD, "use_front_camera" -> {
                     Log.d("MonitoringService", "Prefs changed ($key), re-binding camera...")
                     updatePrefValues()
                     startMonitoring()
                 }
-                "audio_threshold", "save_photos" -> {
+                in SensorSettings.KEYS -> {
+                    Log.d("MonitoringService", "Sensor settings changed ($key), restarting sensors...")
+                    updatePrefValues()
+                    if (_isMonitoring.value) restartSensors()
+                }
+                "save_photos" -> {
                     Log.d("MonitoringService", "Prefs changed ($key), updating values...")
                     updatePrefValues()
-                    if (key == "audio_threshold") startMicrophoneMonitoring()
                 }
             }
         }
     }
 
     private var savePhotosPref = true
-    private var sensitivityPref = 15f
     private var useFrontCameraPref = false
-    private var audioThresholdPref = 200f
+    @Volatile private var sensors = SensorSettings()
 
     private fun updatePrefValues() {
         val prefs = getSharedPreferences("neruppu_prefs", MODE_PRIVATE)
         savePhotosPref = prefs.getBoolean("save_photos", true)
-        sensitivityPref = prefs.getFloat("motion_sensitivity", 15f)
         useFrontCameraPref = prefs.getBoolean("use_front_camera", false)
-        audioThresholdPref = prefs.getFloat("audio_threshold", 200f)
+        sensors = SensorSettings.from(prefs)
+    }
+
+    /** Sensor switches changed while guarding: start only the enabled ones. */
+    private fun restartSensors() {
+        sensorsJob?.cancel()
+        sensorsJob = null
+        if (!isRecordingAudio.get()) {
+            microphoneJob?.cancel()
+            microphoneJob = null
+        }
+        startMonitoring()
     }
 
     override fun onBind(intent: Intent): IBinder? {
@@ -470,10 +483,10 @@ class MonitoringService : LifecycleService() {
             cameraManager.bindCamera(
                 lifecycleOwner = this,
                 useFrontCamera = useFrontCameraPref,
-                sensitivity = (sensitivityPref * 30).toInt().coerceIn(5, 30),
+                sensitivity = sensors.motionAnalyzerSensitivity,
                 onMotionDetected = { level ->
                     _motionLevel.value = level
-                    if (isArmed() && level > 15.0) {
+                    if (sensors.motion && isArmed() && level > 15.0) {
                         Log.v("MonitoringService", "THRESHOLD EXCEEDED: $level")
                         serviceScope.launch {
                             handleEvent(SensorType.CAMERA_MOTION, "Camera motion detected: Level ${String.format("%.2f", level)}")
@@ -491,6 +504,8 @@ class MonitoringService : LifecycleService() {
 // Start sensor data flows only if we are monitoring
         // UI preview only needs the camera (handled above)
         if (_isMonitoring.value) {
+            val enabled = sensors
+            Log.i("MonitoringService", "Guarding with $enabled")
             sensorsJob = serviceScope.launch {
                 Log.v("MonitoringService", "Launching sensor flows...")
                 
@@ -513,17 +528,19 @@ class MonitoringService : LifecycleService() {
                         }
                     }
 
-                launch { accelerometerFlow.collect() }
-                launch { lightFlow.collect() }
+                // Disabled sensors are not even started (no microphone use
+                // without sound detection).
+                if (enabled.movement) launch { accelerometerFlow.collect() }
+                if (enabled.light) launch { lightFlow.collect() }
                 
                 // Significant Motion Monitoring (Ultra-low power wakeups)
-                launch {
+                if (enabled.movement) launch {
                     significantMotionDriver.observeSignificantMotion().collect {
                         handleEvent(SensorType.ACCELEROMETER, "Significant motion detected (hardware trigger)")
                     }
                 }
                 
-                startMicrophoneMonitoring()
+                if (enabled.sound) startMicrophoneMonitoring()
             }
         } else if (_uiActive.value) {
             // If UI is active but NOT monitoring, we still want to show levels
@@ -569,15 +586,10 @@ class MonitoringService : LifecycleService() {
                     val spike = fastBaseline - slowBaseline
                     
                     // Adjust sensitivity based on scale. 
-                    val threshold = if (audioThresholdPref <= 1.0f) {
-                        // Map slider 0.0-1.0 to RMS 50-2000
-                        50f + (audioThresholdPref * 1950f)
-                    } else {
-                        audioThresholdPref
-                    }
+                    val threshold = sensors.soundSpikeRms
 
                     // CRITICAL: Check threshold BEFORE compareAndSet to avoid blocking
-                    if (isArmed() && spike > threshold && isRecordingAudio.compareAndSet(false, true)) {
+                    if (sensors.sound && isArmed() && spike > threshold && isRecordingAudio.compareAndSet(false, true)) {
                         Log.i("MonitoringService", "AUDIO TRIGGER (SPIKE): $spike (Threshold: $threshold, Fast: $fastBaseline, Slow: $slowBaseline)")
                         serviceScope.launch {
                             val eventId = handleEvent(SensorType.MICROPHONE, "Acoustic spike detected: ${spike.toInt()}")
@@ -624,7 +636,7 @@ class MonitoringService : LifecycleService() {
                 // RESUME monitoring ASAP
                 isRecordingAudio.set(false)
                 Log.d("MonitoringService", "Resetting audio recording flag and restarting monitoring.")
-                startMicrophoneMonitoring()
+                if (_isMonitoring.value && sensors.sound) startMicrophoneMonitoring()
                 
                 // Process the captured file and alerts OUTSIDE the monitoring pause
                 if (uri != null && audioFile != null && eventId != -1L) {
@@ -651,6 +663,11 @@ class MonitoringService : LifecycleService() {
         println("Neruppu: handleEvent type=$type")
         if (!isArmed()) {
             Log.d("MonitoringService", "Event ignored, not armed (exit delay or idle): $type")
+            return -1
+        }
+        // Last guard: a sensor switched off in Settings never raises an event.
+        if (!sensors.allows(type)) {
+            Log.d("MonitoringService", "Event ignored, sensor disabled in Settings: $type")
             return -1
         }
         lastEventAt = System.currentTimeMillis()

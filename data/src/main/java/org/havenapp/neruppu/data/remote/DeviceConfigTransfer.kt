@@ -183,7 +183,7 @@ class DeviceConfigTransfer(
 
         // Only these keys travel; anything else in a received config is ignored.
         val BOOLEAN_KEYS = setOf(
-            "motion_enabled", "sound_enabled", "light_enabled",
+            "motion_enabled", "sound_enabled", "light_enabled", "accelerometer_enabled",
             "push_alerts", "save_photos", "use_front_camera"
         )
         val FLOAT_KEYS = setOf("motion_sensitivity", "sound_threshold", "audio_threshold", "audio_capture_duration")
